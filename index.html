@@ -1388,5 +1388,53 @@
     <script src="assets/js/accordion.js"></script>
     <script src="assets/js/image-lightbox.js"></script>
     <script src="assets/js/script.js"></script>
+
+    <script>
+    // Connect to FastAPI WebSocket
+    const socket = new WebSocket("ws://127.0.0.1:5000/ws");
+
+    // When connected
+    socket.onopen = () => {
+    console.log("Connected to chat server");
+    };
+
+    // When receiving a new message
+    socket.onmessage = (event) => {
+    const data = event.data;
+    addMessageToUI("Server", data); // show in chat window
+    };
+
+    // Send message function
+    function sendMessage(content) {
+    socket.send(content);
+    addMessageToUI("Me", content); // show my own message
+    }
+
+    // Add message bubble to UI
+    function addMessageToUI(sender, content) {
+    const chatBox = document.getElementById("chatMessages");
+    const messageDiv = document.createElement("div");
+    messageDiv.className = sender === "Me" ? "message sent" : "message received";
+    messageDiv.innerHTML = `
+        <div class="message-wrapper">
+        <div class="message-content">
+            <div class="message-text">${content}</div>
+        </div>
+        <div class="message-timestamp">${new Date().toLocaleTimeString()}</div>
+        </div>`;
+    chatBox.appendChild(messageDiv);
+    }
+
+    // Hook up the send button
+    document.querySelector("#sendBtn").addEventListener("click", () => {
+        const input = document.querySelector("#msgInput");
+        const message = input.value;
+        if (message.trim() !== "") {
+            sendMessage(message);
+            input.value = "";
+        }
+    });
+    </script>
+
 </body>
 </html>
