@@ -1,24 +1,26 @@
-# backend/main.py
-from fastapi import FastAPI, WebSocket
+# backend/app.py
+from flask import Flask, jsonify
+from flask_sock import Sock  # for WebSocket support
 
-app = FastAPI()
+app = Flask(__name__)
+sock = Sock(app)
 
 # Simple REST route
-@app.get("/")
+@app.route("/")
 def home():
-    return {"message": "Chat server is running!"}
+    return jsonify({"message": "Chat server is running with Flask!"})
 
 # Example REST route for messages
-@app.get("/messages")
+@app.route("/messages")
 def get_messages():
-    # Later you’ll connect this to your database
-    return [{"sender": "Alice", "content": "Hello!"}, {"sender": "Bob", "content": "Hi!"}]
+    return jsonify([
+        {"sender": "Alice", "content": "Hello!"},
+        {"sender": "Bob", "content": "Hi!"}
+    ])
 
 # WebSocket route for real-time chat
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+@sock.route("/ws")
+def websocket(ws):
     while True:
-        data = await websocket.receive_text()
-        # Echo back the message for now
-        await websocket.send_text(f"Message received: {data}")
+        data = ws.receive()
+        ws.send(f"Message received: {data}")

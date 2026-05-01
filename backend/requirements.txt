@@ -1,4 +1,5 @@
-fastapi
-uvicorn
+flask
+flask-sock
+gunicorn
 sqlalchemy
 sqlite3   # use SQLite for free hosting (no need for PostgreSQL setup)
