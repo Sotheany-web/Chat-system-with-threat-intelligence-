@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0f5fc;
+            --card: #ffffff;
+            --border: #ccddf5;
+            --accent: #2860b0;
+            --accent-dim: rgba(40,96,176,0.1);
+            --text: #0a1e3c;
+            --muted: #6888b0;
+            --input-bg: #e8f0fc;
+            --danger: #c0392b;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        /* Ambient background orbs */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::before {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(40,96,176,0.07) 0%, transparent 70%);
+            top: -100px; right: -100px;
+            animation: drift 12s ease-in-out infinite alternate;
+        }
+        body::after {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(100,160,230,0.06) 0%, transparent 70%);
+            bottom: -80px; left: -80px;
+            animation: drift 16s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes drift {
+            from { transform: translate(0, 0); }
+            to   { transform: translate(30px, 20px); }
+        }
+
+        .login-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+            animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Decorative top line */
+        .login-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 48px 44px 44px;
+            box-shadow:
+                0 0 0 1px rgba(40,96,176,0.06),
+                0 20px 60px rgba(40,96,176,0.1),
+                0 4px 16px rgba(40,96,176,0.06);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.6;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 36px;
+        }
+
+        .brand-icon {
+            width: 36px; height: 36px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(40,96,176,0.25);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .brand-icon svg {
+            width: 18px; height: 18px;
+            stroke: var(--accent);
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .brand-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--text);
+        }
+
+        h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+            letter-spacing: -0.01em;
+        }
+
+        .subtitle {
+            font-size: 13.5px;
+            color: var(--muted);
+            font-weight: 300;
+            margin-bottom: 32px;
+            letter-spacing: 0.01em;
+        }
+
+        /* Error alert */
+        .alert-danger {
+            background: rgba(224,114,114,0.1);
+            border: 1px solid rgba(224,114,114,0.25);
+            border-radius: 10px;
+            color: #c0392b;
+            font-size: 13px;
+            padding: 10px 14px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert-danger::before {
+            content: '⚠';
+            font-size: 14px;
+        }
+
+        /* Form fields */
+        .field-group {
+            margin-bottom: 16px;
+        }
+
+        .field-label {
+            display: block;
+            font-size: 11.5px;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            background: var(--input-bg) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 10px !important;
+            color: var(--text) !important;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            padding: 12px 16px !important;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            height: auto !important;
+        }
+
+        .form-control::placeholder {
+            color: rgba(104,136,176,0.6);
+        }
+
+        .form-control:focus {
+            background: var(--input-bg) !important;
+            border-color: rgba(40,96,176,0.5) !important;
+            box-shadow: 0 0 0 3px rgba(40,96,176,0.1) !important;
+            color: var(--text) !important;
+            outline: none;
+        }
+
+        /* Login button */
+        .btn-login {
+            width: 100%;
+            padding: 13px;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            margin-top: 24px;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(40,96,176,0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-login::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+        }
+
+        .btn-login:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 28px rgba(40,96,176,0.35);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        /* Divider + register */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 28px 0 22px;
+        }
+
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .divider span {
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .register-link {
+            display: block;
+            text-align: center;
+            font-size: 13.5px;
+            color: var(--muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .register-link strong {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .register-link:hover {
+            color: var(--text);
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-wrapper">
+    <div class="login-card">
+
+        <div class="brand-mark">
+            <div class="brand-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <span class="brand-name">Talky</span>
+        </div>
+
+        <h2>Welcome back</h2>
+        <p class="subtitle">Sign in to continue to your account</p>
+
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            <div class="field-group">
+                <label class="field-label" for="username">Username</label>
+                <input id="username" class="form-control" name="username" placeholder="Enter your username" autocomplete="username">
+            </div>
+
+            <div class="field-group">
+                <label class="field-label" for="password">Password</label>
+                <input id="password" class="form-control" name="password" type="password" placeholder="••••••••" autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="btn-login">Sign In</button>
+        </form>
+
+        <div class="divider"><span>or</span></div>
+
+        <a class="register-link" href="/register">
+            Don't have an account? <strong>Create one</strong>
+        </a>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
