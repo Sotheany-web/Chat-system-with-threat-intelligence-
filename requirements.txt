@@ -1,6 +1,6 @@
 flask
 flask-socketio
-flask-socket
+# flask-socket
 # gunicorn
 gevent
 eventlet
