@@ -1388,42 +1388,20 @@
         </div>
     </div>
 
-    <script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    document.querySelectorAll('.user-item').forEach(item => {
-        item.addEventListener('click', function () {
-            const user = this.getAttribute('data-user');
-            window.location.href = '/dashboard?chat_user=' + user;
-        });
-    });
-
-});
-</script>
-
+<!-- Define chatUser from Flask template -->
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    const icon = document.querySelector('[data-tab="profile"]');
-    const popup = document.getElementById('profilePopup');
-
-    icon.addEventListener('click', function (e) {
-        e.stopPropagation();
-
-        const rect = icon.getBoundingClientRect();
-
-        popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-        popup.style.left = (rect.left + window.scrollX) + 'px';
-
-        popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
-    });
-
-    document.addEventListener('click', function () {
-        popup.style.display = 'none';
-    });
-
-});
+  const chatUser = "{{ chat_user }}";
+  const loggedInUser = "{{ username }}";
 </script>
+
+<!-- Load Socket.IO client (served automatically when you run with socketio.run(app)) -->
+<script src="/socket.io/socket.io.js"></script>
+
+<!-- Load your crypto logic -->
+<script src="{{ url_for('static', filename='assets/js/crypto.js') }}"></script>
+
+<!-- Load your chat logic (handles send button, receive messages, etc.) -->
+<script src="{{ url_for('static', filename='assets/js/chat.js') }}"></script>
 
 </body>
 

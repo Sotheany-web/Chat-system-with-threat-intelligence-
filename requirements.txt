@@ -1,3 +1,12 @@
 flask
-flask-sock
-gunicorn
+flask-socketio
+flask-socket
+# gunicorn
+gevent
+eventlet
+# hypercorn
+flask_sqlalchemy/
+cryptography
+# fastapi
+python-multipart
+# need to install pip install flask-socketio for the communication traffic
