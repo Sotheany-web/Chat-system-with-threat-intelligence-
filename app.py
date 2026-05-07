@@ -254,11 +254,11 @@ def send_message():
         print("[DEBUG] Failed to store message:", e)
         return jsonify({"error": "Failed to store message"}), 500
 
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=5000, debug=True)
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    eventlet.wsgi.server(eventlet.listen(("0.0.0.0", port)), app)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+# if __name__ == "__main__":
+#     port = int(os.environ.get("PORT", 5000))
+#     eventlet.wsgi.server(eventlet.listen(("0.0.0.0", port)), app)
 
 # # Add this at the very bottom:
 # from asgiref.wsgi import WsgiToAsgi
