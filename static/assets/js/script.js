@@ -609,4 +609,3 @@ function setupUserSelection () {
     new ImageLightbox();
 
 });
-

@@ -1388,6 +1388,43 @@
         </div>
     </div>
 
+    <script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    document.querySelectorAll('.user-item').forEach(item => {
+        item.addEventListener('click', function () {
+            const user = this.getAttribute('data-user');
+            window.location.href = '/dashboard?chat_user=' + user;
+        });
+    });
+
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const icon = document.querySelector('[data-tab="profile"]');
+    const popup = document.getElementById('profilePopup');
+
+    icon.addEventListener('click', function (e) {
+        e.stopPropagation();
+
+        const rect = icon.getBoundingClientRect();
+
+        popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+        popup.style.left = (rect.left + window.scrollX) + 'px';
+
+        popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', function () {
+        popup.style.display = 'none';
+    });
+
+});
+</script>
+
 <!-- Define chatUser from Flask template -->
 <script>
   const chatUser = "{{ chat_user }}";
