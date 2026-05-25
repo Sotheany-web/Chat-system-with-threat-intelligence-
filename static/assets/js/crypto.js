@@ -1,102 +1,78 @@
 // crypto.js
 console.log("crypto.js loaded");
 
-let aesKey; // shared AES key
+let aesKey = null;
 
-// Check environment
-console.log("[DEBUG] window.crypto:", window.crypto);
-console.log("[DEBUG] window.crypto.subtle:", window.crypto ? window.crypto.subtle : "no subtle");
+/**
+ * Fetch a per-conversation AES-128 key from the server.
+ * Both participants derive the same key (server sorts usernames before hashing),
+ * so messages encrypted by either side can be decrypted by the other.
+ */
+async function generateAESKey(otherUser) {
+    try {
+        if (!window.crypto || !window.crypto.subtle) {
+            throw new Error("Web Crypto API not available in this browser");
+        }
 
-// Step 1: RSA public key import (simplified demo)
-async function importPublicKey(pem) {
-  if (!window.crypto || !window.crypto.subtle) {
-    throw new Error("Web Crypto API not available");
-  }
+        const res = await fetch(`/conversation_key/${otherUser}`);
+        if (!res.ok) throw new Error(`Server returned ${res.status} when fetching key`);
 
-  const binaryDer = str2ab(
-    pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").trim()
-  );
-  return await window.crypto.subtle.importKey(
-    "spki",
-    binaryDer,
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    true,
-    ["encrypt"]
-  );
+        const { key } = await res.json();
+
+        // Convert 32-char hex string → 16 bytes
+        const rawKey = new Uint8Array(key.match(/.{2}/g).map(b => parseInt(b, 16)));
+
+        aesKey = await window.crypto.subtle.importKey(
+            "raw",
+            rawKey,
+            { name: "AES-GCM" },
+            false,              // not extractable
+            ["encrypt", "decrypt"]
+        );
+
+        console.log("[DEBUG] AES key ready for conversation with", otherUser);
+    } catch (err) {
+        console.error("[DEBUG] Failed to load AES key:", err);
+        throw err;
+    }
 }
 
-// Step 2: Generate AES key
-async function generateAESKey() {
-  try {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API not available");
-    }
+/**
+ * Encrypt a plaintext string using AES-GCM.
+ * Returns base64-encoded ciphertext and nonce.
+ */
+async function encryptMessage(plaintext) {
+    if (!aesKey) throw new Error("AES key not initialized — call generateAESKey first");
 
-    // Debug: show what we're about to import
-    const rawKey = new TextEncoder().encode("1234567890abcdef");
-    console.log("[DEBUG] rawKey length:", rawKey.length, "bytes");
+    const data = new TextEncoder().encode(plaintext);
+    const nonce = crypto.getRandomValues(new Uint8Array(12)); // 96-bit nonce for AES-GCM
 
-    aesKey = await window.crypto.subtle.importKey(
-      "raw",
-      rawKey,
-      { name: "AES-GCM" },
-      true,
-      ["encrypt", "decrypt"]
+    const ciphertextBuffer = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: nonce },
+        aesKey,
+        data
     );
 
-    console.log("[DEBUG] AES key generated:", aesKey);
-  } catch (err) {
-    console.error("[DEBUG] Failed to generate AES key:", err);
-    throw err; // rethrow so caller sees it
-  }
+    const ciphertextB64 = btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer)));
+    const nonceB64 = btoa(String.fromCharCode(...nonce));
+
+    return { ciphertext: ciphertextB64, nonce: nonceB64 };
 }
 
-// Step 3: Encrypt message with AES-GCM
-async function encryptMessage(plaintext) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plaintext);
-
-  // AES-GCM requires a 12-byte nonce
-  const nonce = crypto.getRandomValues(new Uint8Array(12));
-
-  const ciphertextBuffer = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce },
-    aesKey,
-    data
-  );
-
-  // Convert to base64 for transport
-  const ciphertextB64 = btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer)));
-  const nonceB64 = btoa(String.fromCharCode(...nonce));
-
-  return { ciphertext: ciphertextB64, nonce: nonceB64 };
-}
-
-// Step 4: Decrypt message with AES-GCM
+/**
+ * Decrypt a base64-encoded AES-GCM message.
+ */
 async function decryptMessage(ciphertextB64, nonceB64) {
-  if (!aesKey) throw new Error("AES key not initialized");
+    if (!aesKey) throw new Error("AES key not initialized");
 
-  // Decode base64 back into bytes
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0));
-  const nonce = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0));
+    const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0));
+    const nonce = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0));
 
-  console.log("Decrypting:", { nonceLength: nonce.length, ciphertextLength: ciphertext.length });
+    const plaintextBuffer = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: nonce },
+        aesKey,
+        ciphertext
+    );
 
-  const plaintextBuffer = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: nonce },
-    aesKey,
-    ciphertext
-  );
-
-  return new TextDecoder().decode(plaintextBuffer);
-}
-
-// Helper: convert PEM to ArrayBuffer
-function str2ab(str) {
-  const b64 = str.replace(/\s+/g, "");
-  const raw = atob(b64);
-  const buffer = new ArrayBuffer(raw.length);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
-  return buffer;
+    return new TextDecoder().decode(plaintextBuffer);
 }

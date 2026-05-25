@@ -8,7 +8,7 @@ def get_all_users():
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT username FROM users")
+    cur.execute("SELECT username FROM users WHERE is_blocked = 0")
     users = cur.fetchall()
 
     conn.close()

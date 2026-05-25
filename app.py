@@ -1,25 +1,19 @@
-from flask import Flask, make_response, render_template, request, redirect, session, jsonify, url_for
-# for real time communication
+from flask import Flask, make_response, render_template, request, session, jsonify, url_for
 from flask_sock import Sock
 import json
+import hashlib
+import hmac
+import os
+import eventlet
+import eventlet.wsgi
+from datetime import datetime
 
 from modules.database import init_db, get_db
 from modules.auth import register_user, login_user
 from modules.database import get_all_users, save_message, get_chat_history
 
-# for cryptography algo
-from flask_sqlalchemy import SQLAlchemy
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-import os, base64
-from datetime import datetime
-import os, eventlet, eventlet.wsgi
-
 app = Flask(__name__)
 app.secret_key = "secret123"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
-db = SQLAlchemy(app)
 
 sock = Sock(app)
 
@@ -71,13 +65,18 @@ def register():
         error = result
     return render_template('register.html', error=error)
 
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    resp = make_response("", 302)
+    resp.headers["Location"] = url_for('login')
+    return resp
 
 @app.route('/dashboard')
 def dashboard():
     print("[DEBUG] dashboard() called")
     if 'user' not in session:
         print("[DEBUG] no user in session")
-        # Replace redirect() with manual response
         resp = make_response("", 302)
         resp.headers["Location"] = url_for('login')
         return resp
@@ -88,7 +87,6 @@ def dashboard():
 
     if chat_user and chat_user not in valid_users:
         print("[DEBUG] invalid chat_user")
-        # Replace jsonify() with manual JSON response
         error_payload = json.dumps({"error": "Invalid user"})
         resp = make_response(error_payload, 403)
         resp.headers["Content-Type"] = "application/json"
@@ -110,17 +108,14 @@ def websocket(ws):
     try:
         print("[DEBUG] WebSocket route entered — handshake accepted")
 
-        # First message from client must be the username string
         username = ws.receive()
         if not username:
             print("[DEBUG] No username received, closing connection")
             return
 
-        # Register connection
         connections[username] = ws
         print(f">>> {username} connected")
 
-        # Main receive/send loop
         while True:
             data = ws.receive()
             if data is None:
@@ -148,27 +143,19 @@ def websocket(ws):
                 "nonce": nonce,
                 "timestamp": datetime.now().isoformat()
             })
-            # --- Save to database ---
+
             try:
                 save_message(username, receiver, ciphertext, nonce)
                 print(f"[DEBUG] Saved message from {username} to {receiver}")
             except Exception as e:
                 print(f"[DEBUG] Failed to save message: {e}")
-        
-            # Forward to receiver if connected
+
             if receiver in connections:
                 try:
                     connections[receiver].send(payload)
                     print(f"[DEBUG] Forwarded message from {username} to {receiver}")
                 except Exception as e:
                     print(f"[DEBUG] Failed to send to {receiver}: {e}")
-
-            # Echo back to sender (optional, for confirmation)
-            try:
-                # ws.send(payload)
-                print(f"[DEBUG] Echoed message back to {username}")
-            except Exception as e:
-                print(f"[DEBUG] Failed to echo back to {username}: {e}")
 
     finally:
         if username and username in connections:
@@ -198,70 +185,43 @@ def messages(chat_user):
     resp.headers["Content-Type"] = "application/json"
     return resp
 
+@app.route("/conversation_key/<other_user>")
+def conversation_key(other_user):
+    """Return a deterministic per-conversation AES key derived from both usernames."""
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
+    users = get_all_users()
+    valid_users = [u[0] for u in users]
+    if other_user not in valid_users:
+        return jsonify({"error": "User not found"}), 404
 
-class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender = db.Column(db.String(50))
-    receiver = db.Column(db.String(50))
-    ciphertext = db.Column(db.Text)
-    nonce = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime)
-
-# --- RSA key generation per user ---
-user_keys = {}
-
-def generate_rsa_keypair(username):
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key = private_key.public_key()
-    user_keys[username] = private_key
-    return public_key
-
-@app.route("/public_key/<username>")
-def get_public_key(username):
-    pub = generate_rsa_keypair(username)
-    pem = pub.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-    return pem.decode()
+    # Sort usernames so both participants derive the exact same key
+    participants = sorted([session['user'], other_user])
+    key_input = f"{participants[0]}:{participants[1]}".encode()
+    derived = hmac.new(app.secret_key.encode(), key_input, hashlib.sha256).digest()
+    return jsonify({"key": derived[:16].hex()})
 
 @app.route("/send", methods=["POST"])
 def send_message():
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
     try:
         data = request.get_json(force=True)
 
-        # Validate required fields
-        required = ["sender", "receiver", "ciphertext", "nonce"]
+        required = ["receiver", "ciphertext", "nonce"]
         for field in required:
             if field not in data or not data[field]:
                 return jsonify({"error": f"Missing field: {field}"}), 400
 
-        msg = Message(
-            sender=data["sender"],
-            receiver=data["receiver"],
-            ciphertext=data["ciphertext"],
-            nonce=data["nonce"],
-            timestamp=datetime.utcnow()  # ensure timestamp is set
-        )
-        db.session.add(msg)
-        db.session.commit()
+        # Use session user as sender — prevents impersonation
+        save_message(session['user'], data["receiver"], data["ciphertext"], data["nonce"])
 
         return jsonify({"status": "stored"}), 201
 
     except Exception as e:
-        db.session.rollback()
         print("[DEBUG] Failed to store message:", e)
         return jsonify({"error": "Failed to store message"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-# if __name__ == "__main__":
-#     port = int(os.environ.get("PORT", 5000))
-#     eventlet.wsgi.server(eventlet.listen(("0.0.0.0", port)), app)
-
-# # Add this at the very bottom:
-# from asgiref.wsgi import WsgiToAsgi
-
-# # Expose an ASGI-compatible app for Hypercorn
-# asgi_app = WsgiToAsgi(app)

@@ -50,21 +50,13 @@
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="vertical-nav" id="verticalNav">
-                <div class="nav-icon tab-swtich mb-3rem">
-                    
-                        <svg width="160" height="52" viewBox="0 0 160 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <text x="0" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif"
-                                font-size="42" font-weight="900" fill="#2860b0" letter-spacing="-1.5">Talk</text>
-                            <text x="114" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif"
-                                font-size="42" font-weight="900" fill="#0a1e3c" letter-spacing="-1.5">y</text>
-                            <circle cx="148" cy="11" r="10" fill="#2860b0" opacity="0.2"/>
-                            <circle cx="148" cy="11" r="6" fill="#2860b0"/>
-                       
-                    </a>
+                <div class="nav-icon tab-swtich mb-3rem" style="display:flex;align-items:center;gap:8px;padding:4px 8px;">
+                    <i class="fas fa-comments" style="font-size:22px;color:#2860b0;"></i>
+                    <span style="font-family:'DM Sans',Arial,sans-serif;font-size:22px;font-weight:900;color:#2860b0;letter-spacing:-1px;">Talky</span>
                 </div>
                                 
                 <div class="nav-icon has-badge active tab-swtich" data-tab="chats">
-                    <i class="fas fa-comment-dots"></i><span class="badge">9</span>
+                    <i class="fas fa-comment-dots"></i>
                 </div>
                 <div class="nav-icon tab-swtich" data-tab="profile"><i class="fas fa-user"></i></div>
                 <div class="nav-icon tab-swtich" data-tab="contacts"><i class="fas fa-book"></i></div>
@@ -73,18 +65,7 @@
                 <div class="mt-auto">
                     <div class="profile-toggle-theme">
                         <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="5"></circle>
-                                <line x1="12" y1="1" x2="12" y2="3"></line>
-                                <line x1="12" y1="21" x2="12" y2="23"></line>
-                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                                <line x1="1" y1="12" x2="3" y2="12"></line>
-                                <line x1="21" y1="12" x2="23" y2="12"></line>
-                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                            </svg>
+                            <i class="fas fa-sun"></i>
                         </button>
                         <div class="user-profile dropdown " id="userProfileBtn">
                             <button class="dropdown-btn" aria-haspopup="true" data-dir="right top" aria-expanded="false">
@@ -104,6 +85,9 @@
                                 <li>
                                     <a href="#"><i class="fas fa-question-circle"></i>Help</a>
                                 </li>
+                                <li>
+                                    <a href="/logout"><i class="fas fa-sign-out-alt"></i>Logout</a>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -113,11 +97,7 @@
                 <div class="sidebar-header">
                     <h1 class="sidebar-title">Messages</h1>
                     <div class="search-container">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
+                        <i class="fas fa-search search-icon"></i>
                         <input type="text" class="search-input" placeholder="Search conversations...">
                     </div>
                     <div class="filter-tabs">
@@ -177,23 +157,18 @@
                             </ul>
                         </div>
                     </div>
-                    <div class="my-profile-avatar">
-                        <img src="assets/images/2147943827.jpg" alt="Avatar">
+                    <div class="my-profile-avatar" style="display:flex;justify-content:center;padding:16px 0;">
+                        <div style="width:80px;height:80px;border-radius:50%;background:#2860b0;color:white;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:bold;">
+                            {{ username[0] | upper }}
+                        </div>
                     </div>
                 </div>
                 <div class="sidebar-container">
                     <div class="auther-details">
-                        <p class="name">Dushane Daniel</p>
-                        <p class="role">Front end Developer</p>
-                        <p class="bio">
-                            A professional profile is an introductory section on your resume that highlights your
-                            relevant qualifications and skills.
-                        </p>
+                        <p class="name">{{ username }}</p>
+                        <p class="role">Talky User</p>
                         <ul class="info-list">
-                            <li class="info-item"><i class="fas fa-user"></i>Dushane Daniel</li>
-                            <li class="info-item"><i class="fas fa-phone"></i>+(365) 1456 12584</li>
-                            <li class="info-item"><i class="fas fa-envelope"></i>dushanedaniel@gmail.com</li>
-                            <li class="info-item"><i class="fas fa-map-marker-alt"></i>California, USA</li>
+                            <li class="info-item"><i class="fas fa-user"></i>{{ username }}</li>
                         </ul>
                     </div>
                 </div>
@@ -203,156 +178,20 @@
                 <div class="sidebar-header">
                     <h1 class="sidebar-title">Contacts</h1>
                     <div class="search-container">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
+                        <i class="fas fa-search search-icon"></i>
                         <input type="text" class="search-input" placeholder="Search contacts...">
                     </div>
                 </div>
                 <div class="sidebar-container">
                     <div class="contact-list">
-                        <!-- A Section -->
-                        <div class="letter-divider letter-a">A</div>
-                        <div class="contact-item">
-                            <img src="assets/images/banner.jpg" alt="Adinda Kirana"
-                                class="avatar">
-                            <div class="contact-name">Adinda Kirana</div>
-
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
+                        {% for u in users %}
+                            {% if u[0] != username %}
+                            <div class="contact-item" style="cursor:pointer;" onclick="loadChatHistory(&#39;{{ u[0] }}&#39;)">
+                                <div class="avatar-initials avatar-green">{{ u[0][:2] | upper }}</div>
+                                <div class="contact-name">{{ u[0] }}</div>
                             </div>
-
-                        </div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">AC</div>
-                            <div class="contact-name">Alaya Cordova</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-
-                        </div>
-
-                        <!-- B Section -->
-                        <div class="letter-divider letter-b">B</div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">BB</div>
-                            <div class="contact-name">Brenda Bell</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-
-                        </div>
-
-
-                        <div class="letter-divider letter-d">D</div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">DG</div>
-                            <div class="contact-name">David Green</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">DD</div>
-                            <div class="contact-name">Dushane Daniel</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <!-- E Section -->
-                        <div class="letter-divider letter-e">E</div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">EM</div>
-                            <div class="contact-name">Elia McDaniel</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-
-                        </div>
-
-                        <!-- H Section -->
-                        <div class="letter-divider letter-h">H</div>
-                        <div class="contact-item">
-                            <div class="avatar-initials avatar-green">HW</div>
-                            <div class="contact-name">Henry Watkins</div>
-                            <div class="dropdown">
-                                <button class="dropdown-btn" data-dir="left bottom" aria-label="More options">
-                                    <i class="fa-solid fa-ellipsis-vertical"></i>
-                                </button>
-                                <ul class="dropdown-menu setting-menu">
-                                    <li>
-                                        <a href="#"><i class="fas fa-edit"></i>Edit</a>
-                                    </li>
-                                    <li>
-                                        <a href="#"><i class="fas fa-trash"></i>Delete</a>
-                                    </li>
-                                </ul>
-                            </div>
-
-                        </div>
+                            {% endif %}
+                        {% endfor %}
                     </div>
                 </div>
             </div>
@@ -360,11 +199,7 @@
                 <div class="sidebar-header">
                     <h1 class="sidebar-title">Bookmark</h1>
                     <div class="search-container">
-                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
+                        <i class="fas fa-search search-icon"></i>
                         <input type="text" class="search-input" placeholder="Search here...">
                     </div>
                 </div>
@@ -373,11 +208,7 @@
                     <div class="file-list">
                         <div class="file-item">
                             <div class="file-icon pdf">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14,2 14,8 20,8"></polyline>
-                                </svg>
+                                <i class="fas fa-file"></i>
                             </div>
                             <div class="file-info">
                                 <div class="file-name">Proposal.pdf</div>
@@ -402,11 +233,7 @@
                         </div>
                         <div class="file-item">
                             <div class="file-icon document" style="background: var(--success-color);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14,2 14,8 20,8"></polyline>
-                                </svg>
+                                <i class="fas fa-file"></i>
                             </div>
                             <div class="file-info">
                                 <div class="file-name">Analysis.xlsx</div>
@@ -428,11 +255,7 @@
                         </div>
                         <div class="file-item">
                             <div class="file-icon document" style="background: var(--warning-color);">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14,2 14,8 20,8"></polyline>
-                                </svg>
+                                <i class="fas fa-file"></i>
                             </div>
                             <div class="file-info">
                                 <div class="file-name">Presentation.pptx</div>
@@ -462,10 +285,7 @@
                 <div class="header-content">
                     <h1 class="settings-title">Settings</h1>
                     <button class="edit-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
+                    <i class="fas fa-edit"></i>
                     </button>
                     <input type="file" id="backgroundInput" accept="image/*" style="display: none;">
                 </div>
@@ -474,10 +294,7 @@
                     <div class="profile-photo-container">
                     <img src="assets/images/2147943827.jpg" alt="Profile" class="profile-photo no-lightbox" id="profileImage">
                     <button class="camera-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                        <circle cx="12" cy="13" r="4" />
-                        </svg>
+                        <i class="fas fa-camera"></i>
                     </button>
                     <input type="file" id="profileInput" accept="image/*" style="display: none;">
                     </div>
@@ -489,36 +306,19 @@
                         <div class="accordion settings-section personal-info">
                             <div class="accordion__header section-header">
                                 <div class="section-icon personal-info-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                        <circle cx="12" cy="7" r="4" />
-                                    </svg>
+                                    <i class="fas fa-user-circle"></i>
                                 </div>
                                 <span class="section-title">Personal Info</span>
                             </div>
                             <div class="accordion__panel section-content" id="personalInfoContent">
                                 <div class="info-item">
-                                    <label>Name</label>
-                                    <input type="text" value="John Doe" class="info-input">
-                                </div>
-                                <div class="info-item">
-                                    <label>Email</label>
-                                    <input type="email" value="john.doe@example.com" class="info-input">
-                                </div>
-                                <div class="info-item">
-                                    <label>Phone</label>
-                                    <input type="tel" value="+1 234 567 8900" class="info-input">
+                                    <label>Username</label>
+                                    <input type="text" value="{{ username }}" class="info-input" readonly>
                                 </div>
                             </div>
                             <div class="accordion__header section-header">
                                 <div class="section-icon privacy-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                        <circle cx="12" cy="16" r="1" />
-                                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                    </svg>
+                                    <i class="fas fa-lock"></i>
                                 </div>
                                 <span class="section-title">Privacy</span>
                             </div>
@@ -577,10 +377,7 @@
 
                             <div class="accordion__header section-header">
                                 <div class="section-icon security-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                                    </svg>
+                                    <i class="fas fa-shield-alt"></i>
                                 </div>
                                 <span class="section-title">Security</span>
                             </div>
@@ -618,10 +415,10 @@
                     </button>
                     <div class="chat-user-info" id="chatUserInfo">
                         <div class="chat-avatar currentChatAvatar">
-                            {{ chat_user[0] }}   <!-- changed -->
+                            {{ chat_user[0] | upper if chat_user else '?' }}
                         </div>
                         <div class="chat-user-details">
-                            <h3 class="currentChatName">{{ chat_user }}</h3>    <!-- changed -->
+                            <h3 class="currentChatName">{{ chat_user or 'Select a chat' }}</h3>
                             <div class="chat-user-status">Active now</div>
                         </div>
                     </div>
@@ -629,36 +426,18 @@
 
                 <div class="chat-actions">
                     <button class="action-btn" id="audioCallBtn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
-                            </path>
-                        </svg>
+                        <i class="fas fa-phone"></i>
                     </button>
                     <button class="action-btn" id="videoCallBtn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                        </svg>
+                        <i class="fas fa-video"></i>
                     </button>
                     <button class="action-btn" id="SearchBtn">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
+                        <i class="fas fa-search"></i>
                     </button>
 
                      <div class="dropdown">
                         <button class="dropdown-btn action-btn" data-dir="bottom left" aria-label="More options">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="1"></circle>
-                                <circle cx="19" cy="12" r="1"></circle>
-                                <circle cx="5" cy="12" r="1"></circle>
-                            </svg>
+                            <i class="fas fa-ellipsis-h"></i>
                         </button>
                         <ul class="dropdown-menu setting-menu chat-setting-option">
                             <li>
@@ -679,214 +458,6 @@
             </div>
 
             <div class="chat-messages" id="chatMessages">
-                <div class="message received" data-message-id="1">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="message-text">Hey! How are you doing today?</div>
-                        </div>
-                        <div class="message-timestamp">10:30 AM</div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="message sent" data-message-id="2">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="message-text">I'm doing great! Just finished my morning workout. How about you?
-                            </div>
-                        </div>
-                        <div class="message-timestamp">
-                            10:32 AM
-                            <div class="message-status">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" class="single-tick"
-                                    width="16px" height="16px">
-                                    <path
-                                        d="M 26.980469 5.9902344 A 1.0001 1.0001 0 0 0 26.292969 6.2929688 L 11 21.585938 L 4.7070312 15.292969 A 1.0001 1.0001 0 1 0 3.2929688 16.707031 L 10.292969 23.707031 A 1.0001 1.0001 0 0 0 11.707031 23.707031 L 27.707031 7.7070312 A 1.0001 1.0001 0 0 0 26.980469 5.9902344 z" />
-                                </svg>
-                            </div>
-                        </div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="message received" data-message-id="3">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="image-message">
-                                <img src="assets/images/454.jpg"  alt="Shared image" loading="lazy">
-                            </div>
-                        </div>
-                        <div class="message-timestamp">10:33 AM</div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="message sent" data-message-id="4">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="file-message">
-                                <div class="file-icon pdf">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14,2 14,8 20,8"></polyline>
-                                    </svg>
-                                </div>
-                                <div class="file-info">
-                                    <div class="file-name">Proposal.pdf</div>
-                                    <div class="file-size">2.4 MB</div>
-                                </div>
-                                <button class="file-download">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7,10 12,15 17,10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="message-timestamp">
-                            10:35 AM
-                            <div class="message-status">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" class="double-tick"
-                                    x="2063" y="2076">
-                                    <path
-                                        d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88a.32.32 0 0 1-.484.032l-.358-.325a.32.32 0 0 0-.484.032l-.378.48a.418.418 0 0 0 .036.54l1.32 1.267a.32.32 0 0 0 .484-.034l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.88a.32.32 0 0 1-.484.032L1.892 7.77a.366.366 0 0 0-.516.005l-.423.433a.364.364 0 0 0 .006.514l3.255 3.185a.32.32 0 0 0 .484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"
-                                        fill="#000" />
-                                </svg>
-                            </div>
-                        </div>
-
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="message received group" data-message-id="3">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="files-gallery multiple">
-                                <div class="gallery-item">
-                                    <img src="assets/images/1.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                   <img src="assets/images/2.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                   <img src="assets/images/3.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                    <div class="gallery-overlay gallery-more">+5 more</div>
-                                    <img src="assets/images/4.jpg"  alt="Design mockup 1">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="message-timestamp">10:33 AM</div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="message sent" data-message-id="4">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            How are you?
-                        </div>
-                        <div class="message-timestamp">
-                            10:35 AM
-                            <div class="message-status double-tick">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="15" id="msg-dblcheck-ack"
-                                    x="2063" y="2076">
-                                    <path
-                                        d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88a.32.32 0 0 1-.484.032l-.358-.325a.32.32 0 0 0-.484.032l-.378.48a.418.418 0 0 0 .036.54l1.32 1.267a.32.32 0 0 0 .484-.034l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.88a.32.32 0 0 1-.484.032L1.892 7.77a.366.366 0 0 0-.516.005l-.423.433a.364.364 0 0 0 .006.514l3.255 3.185a.32.32 0 0 0 .484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"
-                                        fill="#4fc3f7" />
-                                </svg>
-
-                            </div>
-                        </div>
-
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="message received">
-                    <div class="typing-indicator">
-                        <div class="typing-dots">
-                            <div class="typing-dot"></div>
-                            <div class="typing-dot"></div>
-                            <div class="typing-dot"></div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- File Preview Area -->
@@ -897,45 +468,20 @@
                     <div class="input-actions">
                         <input type="file" class="file-input" id="fileInput" multiple accept="*/*">
                         <button class="input-action-btn" id="attachFileBtn" title="Attach File">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path
-                                    d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.64 16.2a2 2 0 0 1-2.83-2.83l8.49-8.49">
-                                </path>
-                            </svg>
+                            <i class="fas fa-paperclip"></i>
                         </button>
                         <input type="file" class="file-input" id="imageInput" accept="image/*">
                         <button class="input-action-btn" id="sendImageBtn" title="Send Image">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                <polyline points="21,15 16,10 5,21"></polyline>
-                            </svg>
+                            <i class="fas fa-image"></i>
                         </button>
                     </div>
                     <textarea class="message-input" placeholder="Type a message..." rows="1"
                         id="messageInput"></textarea>
                     <button class="input-action-btn" id="sendAudioBtn">
-                        <svg fill="currentColor" width="16" height="16" version="1.1" xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 512 512" xmlns:xlink="http://www.w3.org/1999/xlink"
-                            enable-background="new 0 0 512 512">
-                            <g>
-                                <g>
-                                    <path
-                                        d="m439.5,236c0-11.3-9.1-20.4-20.4-20.4s-20.4,9.1-20.4,20.4c0,70-64,126.9-142.7,126.9-78.7,0-142.7-56.9-142.7-126.9 0-11.3-9.1-20.4-20.4-20.4s-20.4,9.1-20.4,20.4c0,86.2 71.5,157.4 163.1,166.7v57.5h-23.6c-11.3,0-20.4,9.1-20.4,20.4 0,11.3 9.1,20.4 20.4,20.4h88c11.3,0 20.4-9.1 20.4-20.4 0-11.3-9.1-20.4-20.4-20.4h-23.6v-57.5c91.6-9.3 163.1-80.5 163.1-166.7z" />
-                                    <path
-                                        d="m256,323.5c51,0 92.3-41.3 92.3-92.3v-127.9c0-51-41.3-92.3-92.3-92.3s-92.3,41.3-92.3,92.3v127.9c0,51 41.3,92.3 92.3,92.3zm-52.3-220.2c0-28.8 23.5-52.3 52.3-52.3s52.3,23.5 52.3,52.3v127.9c0,28.8-23.5,52.3-52.3,52.3s-52.3-23.5-52.3-52.3v-127.9z" />
-                                </g>
-                            </g>
-                        </svg>
+                        <i class="fas fa-microphone"></i>
                     </button>
                     <button class="send-button" id="sendButton">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22,2 15,22 11,13 2,9"></polygon>
-                        </svg>
+                        <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
             </div>
@@ -966,10 +512,7 @@
             <div class="right-sidebar-header">
                 <h2 class="right-sidebar-title">Contact Info</h2>
                 <button class="close-right-sidebar" id="closeRightSidebar">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="right-sidebar-content">
@@ -1068,22 +611,14 @@
                         <div class="file-list">
                             <div class="file-item">
                                 <div class="file-icon pdf">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14,2 14,8 20,8"></polyline>
-                                    </svg>
+                                    <i class="fas fa-file"></i>
                                 </div>
                                 <div class="file-info">
                                     <div class="file-name">Proposal.pdf</div>
                                     <div class="file-meta">2.4 MB • 2 days ago</div>
                                 </div>
                                 <button class="file-menu-btn" aria-label="Options" aria-expanded="false">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#6C7199">
-                                        <circle cx="12" cy="5" r="2"></circle>
-                                        <circle cx="12" cy="12" r="2"></circle>
-                                        <circle cx="12" cy="19" r="2"></circle>
-                                    </svg>
+                                    <i class="fas fa-ellipsis-v"></i>
                                 </button>
                                 <div class="dropdown-menu" style="top: 100%; bottom: auto;">
                                     <ul>
@@ -1094,22 +629,14 @@
                             </div>
                             <div class="file-item">
                                 <div class="file-icon document" style="background: var(--success-color);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14,2 14,8 20,8"></polyline>
-                                    </svg>
+                                    <i class="fas fa-file"></i>
                                 </div>
                                 <div class="file-info">
                                     <div class="file-name">Analysis.xlsx</div>
                                     <div class="file-meta">1.8 MB • 1 week ago</div>
                                 </div>
                                 <button class="file-menu-btn" aria-label="Options" aria-expanded="false">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#6C7199">
-                                        <circle cx="12" cy="5" r="2"></circle>
-                                        <circle cx="12" cy="12" r="2"></circle>
-                                        <circle cx="12" cy="19" r="2"></circle>
-                                    </svg>
+                                    <i class="fas fa-ellipsis-v"></i>
                                 </button>
                                 <div class="dropdown-menu" style="top: 100%; bottom: auto;">
                                     <ul>
@@ -1120,22 +647,14 @@
                             </div>
                             <div class="file-item">
                                 <div class="file-icon document" style="background: var(--warning-color);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                        <polyline points="14,2 14,8 20,8"></polyline>
-                                    </svg>
+                                    <i class="fas fa-file"></i>
                                 </div>
                                 <div class="file-info">
                                     <div class="file-name">Presentation.pptx</div>
                                     <div class="file-meta">5.2 MB • 2 weeks ago</div>
                                 </div>
                                 <button class="file-menu-btn" aria-label="Options" aria-expanded="false">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#6C7199">
-                                        <circle cx="12" cy="5" r="2"></circle>
-                                        <circle cx="12" cy="12" r="2"></circle>
-                                        <circle cx="12" cy="19" r="2"></circle>
-                                    </svg>
+                                    <i class="fas fa-ellipsis-v"></i>
                                 </button>
                                 <div class="dropdown-menu" style="top: 100%; bottom: auto;">
                                     <ul>
@@ -1150,30 +669,15 @@
                 <div class="section">
                     <div class="settings-list">
                         <div class="settings-item">
-                            <svg class="settings-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2">
-                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                                <line x1="12" y1="2" x2="12" y2="12"></line>
-                            </svg>
+                            <i class="fas fa-bell-slash settings-icon"></i>
                             <div class="settings-text">Mute Notifications</div>
                         </div>
                         <div class="settings-item">
-                            <svg class="settings-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2">
-                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="9" cy="7" r="4"></circle>
-                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                            </svg>
+                            <i class="fas fa-users settings-icon"></i>
                             <div class="settings-text">Group Settings</div>
                         </div>
                         <div class="settings-item">
-                            <svg class="settings-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                <polyline points="16,17 21,12 16,7"></polyline>
-                                <line x1="21" y1="12" x2="9" y2="12"></line>
-                            </svg>
+                            <i class="fas fa-sign-out-alt settings-icon"></i>
                             <div class="settings-text danger">Leave Group</div>
                         </div>
                     </div>
@@ -1185,19 +689,13 @@
             <div class="right-sidebar-header">
                 <h2 class="right-sidebar-title">Search</h2>
                 <button class="close-right-sidebar" id="closeSearchSidebar">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="right-sidebar-content">
                 <div class="search-result-container">
                     <div class="search-bar">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" width="20px" height="20px">
-                            <path
-                                d="M 13 3 C 7.4889971 3 3 7.4889971 3 13 C 3 18.511003 7.4889971 23 13 23 C 15.396508 23 17.597385 22.148986 19.322266 20.736328 L 25.292969 26.707031 A 1.0001 1.0001 0 1 0 26.707031 25.292969 L 20.736328 19.322266 C 22.148986 17.597385 23 15.396508 23 13 C 23 7.4889971 18.511003 3 13 3 z M 13 5 C 17.430123 5 21 8.5698774 21 13 C 21 17.430123 17.430123 21 13 21 C 8.5698774 21 5 17.430123 5 13 C 5 8.5698774 8.5698774 5 13 5 z" />
-                        </svg>
+                        <i class="fas fa-search"></i>
                         <input type="search" placeholder="Search" value="" />
                     </div>
                     <div class="result">
@@ -1248,18 +746,7 @@
                             <div class="call-actions">
                                 <button><i class="fas fa-user-plus"></i> Invite</button>
                                 <button class="theme-toggle" id="themeToggleVideo" title="Toggle Dark/Light Mode">
-                                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                       stroke-width="2">
-                                       <circle cx="12" cy="12" r="5"></circle>
-                                       <line x1="12" y1="1" x2="12" y2="3"></line>
-                                       <line x1="12" y1="21" x2="12" y2="23"></line>
-                                       <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                                       <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                                       <line x1="1" y1="12" x2="3" y2="12"></line>
-                                       <line x1="21" y1="12" x2="23" y2="12"></line>
-                                       <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                                       <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                                   </svg>
+                                   <i class="fas fa-sun"></i>
                                  </button>
                             </div>
                         </div>
@@ -1430,9 +917,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const chatUser = "{{ chat_user }}";
   const loggedInUser = "{{ username }}";
 </script>
-
-<!-- Load Socket.IO client (served automatically when you run with socketio.run(app)) -->
-<script src="/socket.io/socket.io.js"></script>
 
 <!-- Load your crypto logic -->
 <script src="{{ url_for('static', filename='assets/js/crypto.js') }}"></script>

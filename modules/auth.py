@@ -1,15 +1,39 @@
 from modules.database import get_db
 from modules.threat_detection import log_event
 import hashlib
+import os
 
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password with a random salt using PBKDF2-HMAC-SHA256."""
+    salt = os.urandom(16)
+    hashed = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+    return salt.hex() + ':' + hashed.hex()
+
+def verify_password(stored_password, provided_password):
+    """
+    Verify a password against the stored hash.
+    Supports both:
+      - New format:    salt_hex:hash_hex  (PBKDF2, secure)
+      - Legacy format: plain sha256 hex   (old accounts, no salt)
+    """
+    try:
+        if ':' in stored_password:
+            # New secure format
+            salt_hex, hash_hex = stored_password.split(':', 1)
+            salt = bytes.fromhex(salt_hex)
+            hashed = hashlib.pbkdf2_hmac('sha256', provided_password.encode(), salt, 100000)
+            return hashed.hex() == hash_hex
+        else:
+            # Legacy fallback — plain SHA-256 (no salt)
+            legacy_hash = hashlib.sha256(provided_password.encode()).hexdigest()
+            return legacy_hash == stored_password
+    except Exception:
+        return False
 
 def register_user(username, password):
     conn = get_db()
     cur = conn.cursor()
 
-    #  1. REQUIRED FIELD CHECK
     if not username or not password:
         conn.close()
         return "Username and password are required"
@@ -17,23 +41,19 @@ def register_user(username, password):
     username = username.strip()
     password = password.strip()
 
-    #  2. LENGTH CHECK
     if len(password) < 6:
         conn.close()
         return "Weak password: must be at least 6 characters"
 
-    #  3. CHECK IF PASSWORD IS ALL SAME DIGIT
     if password.isdigit() and len(set(password)) == 1:
         conn.close()
         return "Weak password: cannot be all same numbers"
 
-    #  4. CHECK DUPLICATE USER
     cur.execute("SELECT username FROM users WHERE username=?", (username,))
     if cur.fetchone():
         conn.close()
         return "Username already exists"
 
-    #  5. HASH PASSWORD (SHA256 as required)
     hashed = hash_password(password)
 
     try:
@@ -42,15 +62,12 @@ def register_user(username, password):
             (username, hashed)
         )
         conn.commit()
-
         log_event(username, "REGISTER_SUCCESS", "User created")
-
         conn.close()
         return "success"
 
     except Exception as e:
         log_event(username, "REGISTER_FAIL", str(e))
-
         conn.close()
         return "Registration error"
 
@@ -58,9 +75,6 @@ def login_user(username, password):
     conn = get_db()
     cur = conn.cursor()
 
-    hashed = hash_password(password)
-
-    #  Get user safely
     cur.execute(
         "SELECT password, failed_attempts, is_blocked FROM users WHERE username=?",
         (username,)
@@ -68,9 +82,7 @@ def login_user(username, password):
 
     user = cur.fetchone()
     print("DEBUG user raw:", user)
-    
 
-    #  SAME RESPONSE FOR ALL FAIL CASES (SECURITY FIX)
     if not user:
         log_event(username, "LOGIN_FAIL", "User not found")
         conn.close()
@@ -85,48 +97,39 @@ def login_user(username, password):
         conn.close()
         return "Account is blocked due to multiple failed login attempts"
 
-    if hashed != db_password:
+    if not verify_password(db_password, password):
         attempts += 1
 
-        #  BLOCK ACCOUNT AFTER 5 FAILS
         if attempts >= 5:
             cur.execute(
                 "UPDATE users SET failed_attempts=?, is_blocked=1 WHERE username=?",
                 (attempts, username)
             )
             conn.commit()
-
             log_event(username, "ACCOUNT_BLOCKED", "Too many failed attempts")
-
             conn.close()
             return "Account blocked due to too many failed attempts"
 
-        # WARNING SYSTEM
         remaining = 5 - attempts
 
         cur.execute(
             "UPDATE users SET failed_attempts=? WHERE username=?",
             (attempts, username)
         )
-
         conn.commit()
-
         log_event(username, "LOGIN_FAIL", f"Wrong password ({attempts} attempts)")
-
         conn.close()
 
-        # show warning only after 3 attempts
         if attempts >= 3:
             return f"Invalid credentials ({remaining} tries left)"
 
         return "Invalid credentials"
 
-    #  SUCCESS
+    # Success — reset failed attempts
     cur.execute(
         "UPDATE users SET failed_attempts=0 WHERE username=?",
         (username,)
     )
-
     conn.commit()
     log_event(username, "LOGIN_SUCCESS", "User logged in")
     conn.close()
