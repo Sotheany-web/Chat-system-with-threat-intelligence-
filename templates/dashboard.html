@@ -895,7 +895,8 @@
             <div class="chat-input">
                 <div class="input-container">
                     <div class="input-actions">
-                        <input type="file" class="file-input" id="fileInput" multiple accept="*/*">
+                        <!-- Hidden file input for general files -->
+                        <input type="file" id="fileInput" accept="*/*" class="file-input">
                         <button class="input-action-btn" id="attachFileBtn" title="Attach File">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
@@ -904,7 +905,7 @@
                                 </path>
                             </svg>
                         </button>
-                        <input type="file" class="file-input" id="imageInput" accept="image/*">
+                        <input type="file" id="imageInput" accept="image/*" class="file-input">
                         <button class="input-action-btn" id="sendImageBtn" title="Send Image">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">

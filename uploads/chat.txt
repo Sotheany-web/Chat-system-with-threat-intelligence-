@@ -100,29 +100,15 @@ async function loadChatHistory(user) {
 
     for (const msg of history) {
       const who = msg.sender === loggedInUser ? "Me" : msg.sender;
-
-      if (msg.msg_type === "text") {
-        let plaintext;
-        try {
-          plaintext = await decryptMessage(msg.ciphertext, msg.nonce);
-        } catch (err) {
-          console.error("[DEBUG] Decryption failed:", err, msg);
-          plaintext = "[Decryption failed]";
-        }
-        addMessageToUI(who, plaintext, msg.timestamp);
-
-      } else if (msg.msg_type === "file") {
-        addMessageToUI(who,
-          `<a href="/uploads/${msg.file_name}" target="_blank">Download file</a>`,
-          msg.timestamp);
-
-      } else if (msg.msg_type === "image") {
-        addMessageToUI(who,
-          `<img src="/uploads/${msg.file_name}" style="max-width:200px;">`,
-          msg.timestamp);
+      let plaintext;
+      try {
+        plaintext = await decryptMessage(msg.ciphertext, msg.nonce);
+      } catch (err) {
+        console.error("[DEBUG] Decryption failed:", err, msg);
+        plaintext = "[Decryption failed]";
       }
+      addMessageToUI(who, plaintext, msg.timestamp);
     }
-
   } catch (err) {
     console.error("[DEBUG] Error loading chat history:", err);
   }
@@ -289,16 +275,6 @@ function sendFile(file) {
             try {
                 const data = JSON.parse(text);
                 console.log("[DEBUG] Parsed JSON:", data);
-
-                if (data.url.endsWith(".pdf")) {
-                  // PDF → open in new tab and render inline
-                  addMessageToUI("Me", `<a href="${data.url}" target="_blank">Open PDF</a>`, new Date().toISOString());
-                } else {
-                  // Other files → download
-                  addMessageToUI("Me", `<a href="${data.url}" target="_blank">Download file</a>`, new Date().toISOString());
-                }
-
-                // Send to receiver via WebSocket
                 socket.send(JSON.stringify({
                     type: "file",
                     sender: loggedInUser,
@@ -336,9 +312,6 @@ function sendImage(image) {
             try {
                 const data = JSON.parse(text);
                 console.log("[DEBUG] Parsed JSON:", data);
-
-                // Render immediately for sender (aligned right)
-                addMessageToUI("Me", `<img src="${data.url}" style="max-width:200px;">`, new Date().toISOString());
 
                 socket.send(JSON.stringify({
                     type: "image",
