@@ -57,6 +57,15 @@ socket.onmessage = async (event) => {
       return;
     }
 
+    // ✅ Add audio handling here
+    if (msg.type === "audio") {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = msg.url;
+      document.getElementById("chatMessages").appendChild(audio);
+      return;
+    }
+
     // Default: text message
     const who = msg.sender === loggedInUser ? "Me" : msg.sender;
     let plaintext;
@@ -119,6 +128,10 @@ async function loadChatHistory(user) {
       } else if (msg.msg_type === "image") {
         addMessageToUI(who,
           `<img src="/uploads/${msg.file_name}" style="max-width:200px;">`,
+          msg.timestamp);
+      } else if (msg.msg_type === "audio") {
+        addMessageToUI(who,
+          `<audio controls src="/uploads/${msg.file_name}"></audio>`,
           msg.timestamp);
       }
     }
@@ -266,6 +279,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
+// Audio upload handlers
+document.addEventListener("DOMContentLoaded", () => {
+    const sendAudioBtn = document.getElementById("sendAudioBtn");
+
+    sendAudioBtn.addEventListener("click", () => {
+        console.log("[DEBUG] sendAudioBtn clicked");
+        startRecording();
+    });
+});
+
+// send file to backend, get URL, render link, and notify receiver via WebSocket
 function sendFile(file) {
     console.log("[DEBUG] sendFile() called with:", file);
     if (!activeReceiver) {
@@ -312,6 +336,7 @@ function sendFile(file) {
         .catch(err => console.error("[DEBUG] Upload error:", err));
 }
 
+// sendimages. Backend returns URL, we render the image and notify receiver.
 function sendImage(image) {
     console.log("[DEBUG] sendImage() called with:", image);
     if (!activeReceiver) {
@@ -354,4 +379,95 @@ function sendImage(image) {
         .catch(err => console.error("[DEBUG] Upload error:", err));
 }
 
+let mediaRecorder;
+let audioChunks = [];
+let isRecording = false;
+
+const audioBtn = document.getElementById("sendAudioBtn");
+
+audioBtn.addEventListener("click", () => {
+    if (!isRecording) {
+        startRecording();
+        audioBtn.textContent = "⏹ Stop"; // change icon/text
+    } else {
+        stopRecording();
+        audioBtn.textContent = "🎤 Record"; // reset icon/text
+    }
+    isRecording = !isRecording;
+});
+
+function startRecording() {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                sendAudio(audioBlob);
+            };
+
+            // Optional: auto‑stop after 60s max
+            setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                    audioBtn.textContent = "🎤 Record";
+                    isRecording = false;
+                }
+            }, 60000);
+        })
+        .catch(err => console.error("Microphone error:", err));
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+    }
+}
+
+// Send audio blob to backend, get URL, render audio player, and notify receiver via WebSocket
+function sendAudio(audioBlob) {
+    console.log("[DEBUG] sendAudio() called with:", audioBlob);
+    if (!activeReceiver) {
+        console.error("[DEBUG] No activeReceiver set! Cannot upload audio.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "voiceMessage.webm");
+    formData.append("receiver", activeReceiver);
+
+    console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
+
+    fetch("/upload_audio", { method: "POST", body: formData })
+        .then(res => {
+            console.log("[DEBUG] Upload response status:", res.status);
+            return res.text();
+        })
+        .then(text => {
+            console.log("[DEBUG] Raw response body:", text);
+            try {
+                const data = JSON.parse(text);
+                console.log("[DEBUG] Parsed JSON:", data);
+
+                // Render immediately for sender (aligned right)
+                addMessageToUI("Me", `<audio controls src="${data.url}"></audio>`, new Date().toISOString());
+
+                // Send to receiver via WebSocket
+                socket.send(JSON.stringify({
+                    type: "audio",
+                    sender: loggedInUser,
+                    receiver: activeReceiver,
+                    url: data.url
+                }));
+                console.log("[DEBUG] WebSocket message sent for audio:", data.url);
+            } catch (err) {
+                console.error("[DEBUG] Failed to parse JSON:", err);
+            }
+        })
+        .catch(err => console.error("[DEBUG] Upload error:", err));
+}
 

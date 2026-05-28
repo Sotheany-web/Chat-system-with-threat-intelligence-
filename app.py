@@ -13,11 +13,11 @@ from flask_sqlalchemy import SQLAlchemy
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-import os, base64
 from datetime import datetime
 from flask import send_from_directory
 from urllib.parse import urlparse
-import os, eventlet, eventlet.wsgi
+import os
+
 
 app = Flask(__name__)
 app.secret_key = "secret123"
@@ -416,6 +416,57 @@ def upload_image():
         db.session.rollback()
         print("[DEBUG] Failed to store image message:", e)
         return jsonify({"error": "Failed to store image"}), 500
+    
+@app.route("/upload_audio", methods=["POST"])
+def upload_audio():
+    print("[DEBUG] /upload_audio route called")
+    print("[DEBUG] request.form:", request.form)
+    print("[DEBUG] request.files:", request.files)
+
+    if "user" not in session:
+        return jsonify({"error": "Not logged in"}), 403
+
+    try:
+        # Get audio file and receiver
+        audio = request.files.get("audio")
+        receiver = request.form.get("receiver")
+        print("[DEBUG] Receiver value:", receiver)
+
+        if not receiver:
+            return jsonify({"error": "Missing receiver"}), 400
+        if not audio:
+            print("[DEBUG] No audio in request.files")
+            return jsonify({"error": "Missing audio"}), 400
+        
+        # Generate simple unique filename: user + timestamp
+        ext = os.path.splitext(audio.filename)[1] or ".webm"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
+
+        # Save audio file
+        filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+        audio.save(filepath)
+
+        # Store metadata in DB
+        new_message = Message(
+            sender=session["user"],
+            receiver=receiver,
+            file_name=unique_name,
+            msg_type="audio",
+            timestamp=datetime.utcnow()
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify({
+            "status": "success",
+            "url": url_for("uploaded_file", filename=unique_name)
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print("[DEBUG] Failed to store audio message:", e)
+        return jsonify({"error": "Failed to store audio"}), 500
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
