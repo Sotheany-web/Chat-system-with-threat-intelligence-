@@ -220,6 +220,55 @@ def websocket(ws):
                         print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
                 else:
                     print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
+            
+            # --- Handle call signaling ---
+            elif msg.get("type") in ["call-offer", "call-answer", "ice-candidate", "call-end", "call-missed"]:
+                print(f"[DEBUG] Received {msg['type']} from {username}: {msg}")
+
+                if not receiver:
+                    print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver")
+                    continue
+
+                payload = json.dumps({
+                    "sender": username,
+                    "receiver": receiver,
+                    "type": msg["type"],
+                    "sdp": msg.get("sdp"),              # for offer/answer
+                    "candidate": msg.get("candidate"),  # for ICE
+                    "status": msg.get("status"),        # for call-end/missed
+                    "duration": msg.get("duration"),    # optional duration
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Save call log in DB for call-end/missed
+                if msg["type"] in ["call-end", "call-missed"]:
+                    try:
+                        new_message = Message(
+                            sender=username,
+                            receiver=receiver,
+                            msg_type="call",
+                            status=msg.get("status"),       # "ended" or "missed"
+                            duration=msg.get("duration"),   # seconds if ended
+                            timestamp=datetime.utcnow()
+                        )
+
+                        db.session.add(new_message)
+                        db.session.commit()
+                        print(f"[DEBUG] Saved call log in DB for {username} -> {receiver}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[DEBUG] Failed to save call log: {e}")
+
+                # Forward signaling payload
+                if receiver in connections:
+                    try:
+                        connections[receiver].send(payload)
+                        print(f"[DEBUG] Forwarded {msg['type']} from {username} to {receiver}")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to forward {msg['type']} to {receiver}: {e}")
+                else:
+                    print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']}")
+
 
     finally:
         if username and username in connections:
@@ -237,17 +286,24 @@ def messages(chat_user):
     history = get_chat_history(session['user'], chat_user)
     formatted = []
     for row in history:
-        formatted.append({
+        entry = {
             "sender": row[0],
             "receiver": row[1],
             "ciphertext": row[2],
             "nonce": row[3],
             "file_name": row[4],
             "msg_type": row[5],
-            "url": url_for("uploaded_file", filename=row[4]) if row[5] in ("file","image") and row[4] else None,
+            "url": url_for("uploaded_file", filename=row[4]) 
+                if row[5] in ("file","image") and row[4] else None,
             "timestamp": row[6].isoformat() if isinstance(row[6], datetime) else row[6]
-        })
+        }
 
+        # Add extra fields for call logs
+        if row[5] == "call":
+            entry["status"] = row[7] if len(row) > 7 else None   # e.g. "ended", "missed"
+            entry["duration"] = row[8] if len(row) > 8 else None # seconds or formatted string
+
+        formatted.append(entry)
 
     payload = json.dumps(formatted)
     resp = make_response(payload, 200)
@@ -261,10 +317,21 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     sender = db.Column(db.String, nullable=False)
     receiver = db.Column(db.String, nullable=False)
-    ciphertext = db.Column(db.Text)   # for text messages
-    nonce = db.Column(db.Text)        # for text messages
-    file_name = db.Column(db.Text)    # for file/image messages
-    msg_type = db.Column(db.String)   # "text", "file", "image"
+
+    # For text
+    ciphertext = db.Column(db.Text)
+    nonce = db.Column(db.Text)
+
+    # For file/image/audio
+    file_name = db.Column(db.Text)
+
+    # Message type: "text", "file", "image", "audio", "call"
+    msg_type = db.Column(db.String)
+
+    # For calls
+    status = db.Column(db.String)     # "ended", "missed", "declined"
+    duration = db.Column(db.Integer)  # seconds
+
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 # --- RSA key generation per user ---

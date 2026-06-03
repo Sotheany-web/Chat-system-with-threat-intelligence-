@@ -61,12 +61,33 @@ def save_file_message(sender, receiver, file_name, msg_type):
             else:
                 raise
 
+# --- Save call log message ---
+def save_call_message(sender, receiver, status, duration=None):
+    for attempt in range(5):
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (sender, receiver, "call", status, duration, datetime.now()))
+            conn.commit()
+            conn.close()
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e):
+                print("[DEBUG] DB locked, retrying...")
+                time.sleep(0.1)
+            else:
+                raise
+
+
 # --- Retrieve chat history (text + file/image) ---
 def get_chat_history(user1, user2):
     conn = get_db()
     cur = conn.cursor()
     cur.execute("""
-        SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp
+        SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration
         FROM messages
         WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
         ORDER BY timestamp
@@ -112,7 +133,9 @@ def init_db():
         ciphertext TEXT,
         nonce TEXT,
         file_name TEXT,
-        msg_type TEXT,
+        msg_type TEXT,   -- "text", "file", "image", "audio", "call"
+        status TEXT,     -- for calls: "ended", "missed", "declined"
+        duration INTEGER, -- call duration in seconds
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     ''')
