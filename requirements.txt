@@ -9,4 +9,5 @@ flask_sqlalchemy
 cryptography
 # fastapi
 python-multipart
+psycopg2
 # need to install pip install flask-socketio for the communication traffic
