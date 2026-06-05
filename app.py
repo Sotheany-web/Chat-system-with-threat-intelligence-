@@ -541,11 +541,9 @@ def uploaded_file(filename):
 
 # ---------------- STARTUP ----------------
 if __name__ == "__main__":
-    # Ensure SQLAlchemy tables exist
-    # with app.app_context():
-    #     db.create_all()
-        # print("[DEBUG] SQLAlchemy tables created:", db.engine.table_names())
-    app.run(host="0.0.0.0", port=5000, debug=True)
+   
+    port = int(os.environ.get("PORT", 5000))  # Render sets PORT
+    app.run(host="0.0.0.0", port=port, debug=True)
 # if __name__ == "__main__":
 #     port = int(os.environ.get("PORT", 5000))
 #     eventlet.wsgi.server(eventlet.listen(("0.0.0.0", port)), app)
