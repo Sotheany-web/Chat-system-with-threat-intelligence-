@@ -7,6 +7,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", "..", ".."))  # go u
 INSTANCE_DIR = os.path.join(PROJECT_ROOT, "instance")
 DB_PATH = os.path.join(INSTANCE_DIR, "database.db")
 
+# DATABASE_URL = postgresql://database_i96q_user:ur6ds5cAen7bQUpeWXynfS1f4yw1dCNN@dpg-d8hf7smrnols73chl19g-a/database_i96q
+
+
 # def get_db():
 #     print("[DEBUG] Using DB path:", DB_PATH)  # helpful check
 #     return sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -32,21 +35,19 @@ def get_all_users():
     conn.close()
     return users
 
-def placeholder():
-    return "%s" if os.environ.get("DATABASE_URL") else "?"
+ph = "%s" if os.environ.get("DATABASE_URL") else "?"
 
-ph = placeholder()  # decide once
-
-# --- Save text message (encrypted) ---
+# --- Save text message ---
 def save_message(sender, receiver, ciphertext, nonce):
-    for attempt in range(5):  # retry up to 5 times
+    for attempt in range(5):
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO messages (sender, receiver, ciphertext, nonce, msg_type, timestamp)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
-            """, (sender, receiver, ciphertext, nonce, "text", datetime.now()))
+            cur.execute(
+                f"INSERT INTO messages (sender, receiver, ciphertext, nonce, msg_type, timestamp) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                (sender, receiver, ciphertext, nonce, "text", datetime.now())
+            )
             conn.commit()
             conn.close()
             return
@@ -59,14 +60,15 @@ def save_message(sender, receiver, ciphertext, nonce):
 
 # --- Save file/image message ---
 def save_file_message(sender, receiver, file_name, msg_type):
-    for attempt in range(5):
+    for attempt in range(5):   # fixed here
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO messages (sender, receiver, file_name, msg_type, timestamp)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
-            """, (sender, receiver, file_name, msg_type, datetime.now()))
+            cur.execute(
+                f"INSERT INTO messages (sender, receiver, file_name, msg_type, timestamp) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
+                (sender, receiver, file_name, msg_type, datetime.now())
+            )
             conn.commit()
             conn.close()
             return
@@ -83,10 +85,11 @@ def save_call_message(sender, receiver, status, duration=None):
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
-            """, (sender, receiver, "call", status, duration, datetime.now()))
+            cur.execute(
+                f"INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp) "
+                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
+                (sender, receiver, "call", status, duration, datetime.now())
+            )
             conn.commit()
             conn.close()
             return
@@ -97,20 +100,21 @@ def save_call_message(sender, receiver, status, duration=None):
             else:
                 raise
 
-
-# --- Retrieve chat history (text + file/image) ---
+# --- Retrieve chat history ---
 def get_chat_history(user1, user2):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute(f"""
-        SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration
-        FROM messages
-        WHERE (sender={ph} AND receiver={ph}) OR (sender={ph} AND receiver={ph})
-        ORDER BY timestamp
-    """, (user1, user2, user2, user1))
+    cur.execute(
+        f"SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration "
+        f"FROM messages "
+        f"WHERE (sender={ph} AND receiver={ph}) OR (sender={ph} AND receiver={ph}) "
+        f"ORDER BY timestamp",
+        (user1, user2, user2, user1)
+    )
     history = cur.fetchall()
     conn.close()
     return history
+
 
 # --- Initialize DB schema ---
 
