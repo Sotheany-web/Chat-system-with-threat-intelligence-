@@ -539,6 +539,34 @@ def upload_audio():
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False) # allow inline viewing
 
+# Temporary debug route
+@app.route("/debug-messages")
+def debug_messages():
+    conn = get_db()
+    cur = conn.cursor()
+    # Select all columns from the messages table
+    cur.execute("SELECT * FROM messages ORDER BY timestamp DESC")
+    rows = cur.fetchall()
+    conn.close()
+
+    # Convert rows into a list of dicts for readability
+    messages = []
+    for row in rows:
+        messages.append({
+            "id": row[0],
+            "sender": row[1],
+            "receiver": row[2],
+            "ciphertext": row[3],
+            "nonce": row[4],
+            "file_name": row[5],
+            "msg_type": row[6],
+            "status": row[7],
+            "duration": row[8],
+            "timestamp": row[9]
+        })
+
+    return {"messages": messages}
+
 # ---------------- STARTUP ----------------
 if __name__ == "__main__":
    
