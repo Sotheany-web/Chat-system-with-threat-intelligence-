@@ -23,8 +23,18 @@ import os
 
 app = Flask(__name__)
 app.secret_key = "secret123"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
+
+# Use Postgres if DATABASE_URL is set, otherwise fallback to SQLite
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
+
 db = SQLAlchemy(app)
+
+# Debug print to confirm which DB is active
+print("[DEBUG] DB engine:", db.engine.url)
 
 # Local dev → always use project folder
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
@@ -42,7 +52,9 @@ if os.environ.get("USE_SUPABASE") == "true":
 # --- WebSocket setup ---
 sock = Sock(app)
 
-init_db()  # Ensure DB is initialized on startup
+# Ensure DB schema exists
+with app.app_context():
+    init_db()
 
 connections = {}
 
