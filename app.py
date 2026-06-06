@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from datetime import datetime
 from flask import send_from_directory
 from urllib.parse import urlparse
+from werkzeug.utils import secure_filename
 import os
 
 
@@ -24,10 +25,18 @@ app.secret_key = "secret123"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
 db = SQLAlchemy(app)
 
-# --- Uploads ---
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")       # secure_chat/uploads
+# Detect if running on Render (you can use DATABASE_URL or set your own env var)
+if os.environ.get("RENDER") or os.environ.get("DATABASE_URL"):
+    # Render → use /tmp (writable ephemeral storage)
+    UPLOAD_FOLDER = "/tmp/uploads"
+else:
+    # Local dev → use project folder
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+
+# Ensure the folder exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 
 # --- WebSocket setup ---
 sock = Sock(app)
@@ -406,8 +415,9 @@ def upload_file():
             print("[DEBUG] No file in request.files")
             return jsonify({"error": "Missing file"}), 400
 
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        # When saving a file
+        filename = secure_filename(file.filename)   # sanitize filename
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
         print("[DEBUG] File saved at:", filepath)
 
@@ -464,9 +474,12 @@ def upload_image():
         if not receiver:
             return jsonify({"error": "Missing receiver"}), 400
         
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        filepath = os.path.join(UPLOAD_FOLDER, image.filename)
+        filename = secure_filename(image.filename)
+        # Build the safe path
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        # Save the file
         image.save(filepath)
+        print("[DEBUG] Image saved at:", filepath)
 
         new_message = Message(
             sender=session["user"],
@@ -488,7 +501,8 @@ def upload_image():
         import traceback; traceback.print_exc()
         print("[DEBUG] Failed to store image message:", e)
         return jsonify({"error": "Failed to store image"}), 500
-    
+
+# --- New route for audio uploads ---
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
     print("[DEBUG] /upload_audio route called")
@@ -499,7 +513,6 @@ def upload_audio():
         return jsonify({"error": "Not logged in"}), 403
 
     try:
-        # Get audio file and receiver
         audio = request.files.get("audio")
         receiver = request.form.get("receiver")
         print("[DEBUG] Receiver value:", receiver)
@@ -510,15 +523,15 @@ def upload_audio():
             print("[DEBUG] No audio in request.files")
             return jsonify({"error": "Missing audio"}), 400
         
-        # Generate simple unique filename: user + timestamp
-        ext = os.path.splitext(audio.filename)[1] or ".webm"
+        # Generate unique filename: user + timestamp + safe extension
+        ext = os.path.splitext(secure_filename(audio.filename))[1] or ".webm"
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
         # Save audio file
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         filepath = os.path.join(UPLOAD_FOLDER, unique_name)
         audio.save(filepath)
+        print("[DEBUG] Audio saved at:", filepath)
 
         # Store metadata in DB
         new_message = Message(
@@ -530,6 +543,18 @@ def upload_audio():
         )
         db.session.add(new_message)
         db.session.commit()
+        print("[DEBUG] Audio message stored in DB")
+
+        # Optional: broadcast to receiver only
+        payload = json.dumps({
+            "sender": session["user"],
+            "receiver": receiver,
+            "url": url_for("uploaded_file", filename=unique_name, _external=True),
+            "msg_type": "audio",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        if receiver in connections:
+            connections[receiver].send(payload)
 
         return jsonify({
             "status": "success",
@@ -538,9 +563,10 @@ def upload_audio():
 
     except Exception as e:
         db.session.rollback()
-        print("[DEBUG] Failed to store audio message:", e)
         import traceback; traceback.print_exc()
+        print("[DEBUG] Failed to store audio message:", e)
         return jsonify({"error": "Failed to store audio"}), 500
+
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
