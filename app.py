@@ -420,8 +420,9 @@ def upload_file():
         filename = secure_filename(file.filename)   # sanitize filename
         # Decide storage backend
         if os.environ.get("USE_SUPABASE") == "true":
-            # Upload to Supabase
-            supabase.storage.from_("uploads").upload(filename, file)
+            # Upload to Supabase directly from memory
+            file_bytes = file.read()
+            supabase.storage.from_("uploads").upload(filename, file_bytes)
             url = supabase.storage.from_("uploads").get_public_url(filename)
             print("[DEBUG] File uploaded to Supabase:", url)
         else:
@@ -484,8 +485,9 @@ def upload_image():
         filename = secure_filename(image.filename)
         # Decide storage backend
         if os.environ.get("USE_SUPABASE") == "true":
-            # Upload to Supabase
-            supabase.storage.from_("uploads").upload(filename, image)
+            # Upload to Supabase directly from memory
+            file_bytes = image.read()
+            supabase.storage.from_("uploads").upload(filename, file_bytes)
             url = supabase.storage.from_("uploads").get_public_url(filename)
             print("[DEBUG] Image uploaded to Supabase:", url)
         else:
@@ -543,7 +545,8 @@ def upload_audio():
         # Decide storage backend
         if os.environ.get("USE_SUPABASE") == "true":
             # Upload to Supabase
-            supabase.storage.from_("uploads").upload(unique_name, audio)
+            file_bytes = audio.read()
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
             url = supabase.storage.from_("uploads").get_public_url(unique_name)
             print("[DEBUG] Audio uploaded to Supabase:", url)
         else:
@@ -583,7 +586,6 @@ def upload_audio():
         import traceback; traceback.print_exc()
         print("[DEBUG] Failed to store audio message:", e)
         return jsonify({"error": "Failed to store audio"}), 500
-
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
