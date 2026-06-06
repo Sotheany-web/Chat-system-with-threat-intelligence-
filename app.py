@@ -33,9 +33,6 @@ else:
 
 db = SQLAlchemy(app)
 
-# Debug print to confirm which DB is active
-print("[DEBUG] DB engine:", db.engine.url)
-
 # Local dev → always use project folder
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
@@ -52,8 +49,9 @@ if os.environ.get("USE_SUPABASE") == "true":
 # --- WebSocket setup ---
 sock = Sock(app)
 
-# Ensure DB schema exists
+# Ensure DB schema exists and print engine
 with app.app_context():
+    print("[DEBUG] DB engine:", db.engine.url)
     init_db()
 
 connections = {}
