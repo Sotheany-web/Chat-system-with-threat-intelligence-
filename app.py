@@ -17,6 +17,7 @@ from datetime import datetime
 from flask import send_from_directory
 from urllib.parse import urlparse
 from werkzeug.utils import secure_filename
+from supabase import create_client, Client
 import os
 
 
@@ -25,18 +26,18 @@ app.secret_key = "secret123"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
 db = SQLAlchemy(app)
 
-# Detect if running on Render (you can use DATABASE_URL or set your own env var)
-if os.environ.get("RENDER") or os.environ.get("DATABASE_URL"):
-    # Render → use /tmp (writable ephemeral storage)
-    UPLOAD_FOLDER = "/tmp/uploads"
-else:
-    # Local dev → use project folder
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+# Local dev → always use project folder
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # ensure local folder exists
 
-# Ensure the folder exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Supabase client (only used if USE_SUPABASE=true)
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+supabase: Client = None
+if os.environ.get("USE_SUPABASE") == "true":
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- WebSocket setup ---
 sock = Sock(app)
@@ -417,14 +418,23 @@ def upload_file():
 
         # When saving a file
         filename = secure_filename(file.filename)   # sanitize filename
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-        print("[DEBUG] File saved at:", filepath)
+        # Decide storage backend
+        if os.environ.get("USE_SUPABASE") == "true":
+            # Upload to Supabase
+            supabase.storage.from_("uploads").upload(filename, file)
+            url = supabase.storage.from_("uploads").get_public_url(filename)
+            print("[DEBUG] File uploaded to Supabase:", url)
+        else:
+            # Local save
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(filepath)
+            print("[DEBUG] File saved locally at:", filepath)
+            url = url_for("uploaded_file", filename=filename, _external=True)
 
         new_message = Message(
             sender=session["user"],
             receiver=receiver,
-            file_name=file.filename,
+            file_name=filename,
             msg_type="file",
             timestamp=datetime.utcnow()
         )
@@ -435,17 +445,14 @@ def upload_file():
         payload = json.dumps({
             "sender": session["user"],
             "receiver": receiver,
-            "file_url": url_for("uploaded_file", filename=file.filename, _external=True),
+            "file_url": url,
             "msg_type": "file",
             "timestamp": datetime.utcnow().isoformat()
         })
         if receiver in connections:
             connections[receiver].send(payload)
 
-        return jsonify({
-            "status": "success",
-            "url": url_for("uploaded_file", filename=file.filename, _external=True)
-        }), 201
+        return jsonify({"status": "success", "url": url}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -475,12 +482,20 @@ def upload_image():
             return jsonify({"error": "Missing receiver"}), 400
         
         filename = secure_filename(image.filename)
-        # Build the safe path
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        # Save the file
-        image.save(filepath)
-        print("[DEBUG] Image saved at:", filepath)
+        # Decide storage backend
+        if os.environ.get("USE_SUPABASE") == "true":
+            # Upload to Supabase
+            supabase.storage.from_("uploads").upload(filename, image)
+            url = supabase.storage.from_("uploads").get_public_url(filename)
+            print("[DEBUG] Image uploaded to Supabase:", url)
+        else:
+            # Local save
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            image.save(filepath)
+            print("[DEBUG] Image saved locally at:", filepath)
+            url = url_for("uploaded_file", filename=filename, _external=True)
 
+        # Save metadata in DB
         new_message = Message(
             sender=session["user"],
             receiver=receiver,
@@ -491,10 +506,7 @@ def upload_image():
         db.session.add(new_message)
         db.session.commit()
 
-        return jsonify({
-            "status": "success",
-            "url": url_for("uploaded_file", filename=image.filename, _external=True)
-        }), 201
+        return jsonify({"status": "success", "url": url}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -528,10 +540,18 @@ def upload_audio():
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
-        # Save audio file
-        filepath = os.path.join(UPLOAD_FOLDER, unique_name)
-        audio.save(filepath)
-        print("[DEBUG] Audio saved at:", filepath)
+        # Decide storage backend
+        if os.environ.get("USE_SUPABASE") == "true":
+            # Upload to Supabase
+            supabase.storage.from_("uploads").upload(unique_name, audio)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
+            print("[DEBUG] Audio uploaded to Supabase:", url)
+        else:
+            # Local save
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+            audio.save(filepath)
+            print("[DEBUG] Audio saved locally at:", filepath)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
 
         # Store metadata in DB
         new_message = Message(
@@ -549,17 +569,14 @@ def upload_audio():
         payload = json.dumps({
             "sender": session["user"],
             "receiver": receiver,
-            "url": url_for("uploaded_file", filename=unique_name, _external=True),
+            "url": url,
             "msg_type": "audio",
             "timestamp": datetime.utcnow().isoformat()
         })
         if receiver in connections:
             connections[receiver].send(payload)
 
-        return jsonify({
-            "status": "success",
-            "url": url_for("uploaded_file", filename=unique_name, _external=True)
-        }), 201
+        return jsonify({"status": "success", "url": url}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -570,7 +587,14 @@ def upload_audio():
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False) # allow inline viewing
+    if os.environ.get("USE_SUPABASE") == "true":
+        # In Supabase mode, files are not served locally.
+        # Just redirect to the Supabase public URL.
+        url = supabase.storage.from_("uploads").get_public_url(filename)
+        return redirect(url)
+    else:
+        # Local mode: serve from UPLOAD_FOLDER
+        return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False)
 
 # Temporary debug route
 @app.route("/debug-messages")

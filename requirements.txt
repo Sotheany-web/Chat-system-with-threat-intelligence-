@@ -10,4 +10,6 @@ cryptography
 # fastapi
 python-multipart
 psycopg2
+supabase
+
 # need to install pip install flask-socketio for the communication traffic
