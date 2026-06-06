@@ -416,29 +416,28 @@ def upload_file():
             print("[DEBUG] No file in request.files")
             return jsonify({"error": "Missing file"}), 400
 
-        # When saving a file
-        filename = secure_filename(file.filename)   # sanitize filename
-        # Decide storage backend
+        filename = secure_filename(file.filename)
+        ext = os.path.splitext(filename)[1] or ".dat"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
+
         if os.environ.get("USE_SUPABASE") == "true":
-            # Upload to Supabase directly from memory
             file_bytes = file.read()
-            supabase.storage.from_("uploads").upload(filename, file_bytes)
-            url = supabase.storage.from_("uploads").get_public_url(filename)
-            print("[DEBUG] File uploaded to Supabase:", url)
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
         else:
-            # Local save
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             file.save(filepath)
-            print("[DEBUG] File saved locally at:", filepath)
-            url = url_for("uploaded_file", filename=filename, _external=True)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
 
         new_message = Message(
             sender=session["user"],
             receiver=receiver,
-            file_name=filename,
+            file_name=unique_name,
             msg_type="file",
             timestamp=datetime.utcnow()
         )
+
         db.session.add(new_message)
         db.session.commit()
         print("[DEBUG] File message stored in DB")
@@ -483,25 +482,23 @@ def upload_image():
             return jsonify({"error": "Missing receiver"}), 400
         
         filename = secure_filename(image.filename)
-        # Decide storage backend
-        if os.environ.get("USE_SUPABASE") == "true":
-            # Upload to Supabase directly from memory
-            file_bytes = image.read()
-            supabase.storage.from_("uploads").upload(filename, file_bytes)
-            url = supabase.storage.from_("uploads").get_public_url(filename)
-            print("[DEBUG] Image uploaded to Supabase:", url)
-        else:
-            # Local save
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
-            image.save(filepath)
-            print("[DEBUG] Image saved locally at:", filepath)
-            url = url_for("uploaded_file", filename=filename, _external=True)
+        ext = os.path.splitext(filename)[1] or ".jpg"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
 
-        # Save metadata in DB
+        if os.environ.get("USE_SUPABASE") == "true":
+            file_bytes = image.read()
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
+        else:
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+            image.save(filepath)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
+
         new_message = Message(
             sender=session["user"],
             receiver=receiver,
-            file_name=image.filename,
+            file_name=unique_name,
             msg_type="image",
             timestamp=datetime.utcnow()
         )
@@ -537,26 +534,19 @@ def upload_audio():
             print("[DEBUG] No audio in request.files")
             return jsonify({"error": "Missing audio"}), 400
         
-        # Generate unique filename: user + timestamp + safe extension
         ext = os.path.splitext(secure_filename(audio.filename))[1] or ".webm"
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
-        # Decide storage backend
         if os.environ.get("USE_SUPABASE") == "true":
-            # Upload to Supabase
             file_bytes = audio.read()
             supabase.storage.from_("uploads").upload(unique_name, file_bytes)
             url = supabase.storage.from_("uploads").get_public_url(unique_name)
-            print("[DEBUG] Audio uploaded to Supabase:", url)
         else:
-            # Local save
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             audio.save(filepath)
-            print("[DEBUG] Audio saved locally at:", filepath)
             url = url_for("uploaded_file", filename=unique_name, _external=True)
 
-        # Store metadata in DB
         new_message = Message(
             sender=session["user"],
             receiver=receiver,
@@ -564,6 +554,7 @@ def upload_audio():
             msg_type="audio",
             timestamp=datetime.utcnow()
         )
+
         db.session.add(new_message)
         db.session.commit()
         print("[DEBUG] Audio message stored in DB")
