@@ -177,49 +177,49 @@ def websocket(ws):
                     except Exception as e:
                         print(f"[DEBUG] Failed to send text message to {receiver}: {e}")
 
-            # --- Handle file/image messages ---
-            elif msg.get("type") in ["file", "image"]:
-                print(f"[DEBUG] Received {msg['type']} message from {username}: {msg}")
+            # # --- Handle file/image messages ---
+            # elif msg.get("type") in ["file", "image"]:
+            #     print(f"[DEBUG] Received {msg['type']} message from {username}: {msg}")
 
-                if not receiver or not msg.get("url"):
-                    print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver or url")
-                    continue
+            #     if not receiver or not msg.get("url"):
+            #         print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver or url")
+            #         continue
 
-                # Extract just the filename from the URL
-                filename = os.path.basename(urlparse(msg["url"]).path)
+            #     # Extract just the filename from the URL
+            #     filename = os.path.basename(urlparse(msg["url"]).path)
 
-                payload = json.dumps({
-                    "sender": username,
-                    "receiver": receiver,
-                    "type": msg["type"],
-                    "url": url_for("uploaded_file", filename=filename),  # full URL for frontend
-                    "timestamp": datetime.now().isoformat()
-                })
-                print(f"[DEBUG] Prepared payload for {msg['type']} message: {payload}")
+            #     payload = json.dumps({
+            #         "sender": username,
+            #         "receiver": receiver,
+            #         "type": msg["type"],
+            #         "url": url_for("uploaded_file", filename=filename),  # full URL for frontend
+            #         "timestamp": datetime.now().isoformat()
+            #     })
+            #     print(f"[DEBUG] Prepared payload for {msg['type']} message: {payload}")
 
-                try:
-                    new_message = Message(
-                        sender=username,
-                        receiver=receiver,
-                        file_name=filename,   # only filename stored in DB
-                        msg_type=msg["type"],
-                        timestamp=datetime.utcnow()
-                    )
-                    db.session.add(new_message)
-                    db.session.commit()
-                    print(f"[DEBUG] Saved {msg['type']} message in DB for {username} -> {receiver}")
-                except Exception as e:
-                    db.session.rollback()
-                    print(f"[DEBUG] Failed to save {msg['type']} message in DB: {e}")
+            #     try:
+            #         new_message = Message(
+            #             sender=username,
+            #             receiver=receiver,
+            #             file_name=filename,   # only filename stored in DB
+            #             msg_type=msg["type"],
+            #             timestamp=datetime.utcnow()
+            #         )
+            #         db.session.add(new_message)
+            #         db.session.commit()
+            #         print(f"[DEBUG] Saved {msg['type']} message in DB for {username} -> {receiver}")
+            #     except Exception as e:
+            #         db.session.rollback()
+            #         print(f"[DEBUG] Failed to save {msg['type']} message in DB: {e}")
 
-                if receiver in connections:
-                    try:
-                        connections[receiver].send(payload)
-                        print(f"[DEBUG] Forwarded {msg['type']} message from {username} to {receiver}")
-                    except Exception as e:
-                        print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
-                else:
-                    print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
+            #     if receiver in connections:
+            #         try:
+            #             connections[receiver].send(payload)
+            #             print(f"[DEBUG] Forwarded {msg['type']} message from {username} to {receiver}")
+            #         except Exception as e:
+            #             print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
+            #     else:
+            #         print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
             
             # --- Handle call signaling ---
             elif msg.get("type") in ["call-offer", "call-answer", "ice-candidate", "call-end", "call-missed"]:
@@ -406,6 +406,7 @@ def upload_file():
             print("[DEBUG] No file in request.files")
             return jsonify({"error": "Missing file"}), 400
 
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
         print("[DEBUG] File saved at:", filepath)
@@ -424,7 +425,7 @@ def upload_file():
         payload = json.dumps({
             "sender": session["user"],
             "receiver": receiver,
-            "file_url": url_for("uploaded_file", filename=file.filename),
+            "file_url": url_for("uploaded_file", filename=file.filename, _external=True),
             "msg_type": "file",
             "timestamp": datetime.utcnow().isoformat()
         })
@@ -433,12 +434,13 @@ def upload_file():
 
         return jsonify({
             "status": "success",
-            "url": url_for("uploaded_file", filename=file.filename)
+            "url": url_for("uploaded_file", filename=file.filename, _external=True)
         }), 201
 
     except Exception as e:
         db.session.rollback()
         print("[DEBUG] Failed to store file message:", e)
+        import traceback; traceback.print_exc()
         return jsonify({"error": "Failed to store file"}), 500
 
 @app.route("/upload_image", methods=["POST"])
@@ -452,15 +454,17 @@ def upload_image():
         return jsonify({"error": "Not logged in"}), 403
 
     try:
+        if "image" not in request.files:
+            print("[DEBUG] No image in request.files")
+            return jsonify({"error": "Missing image"}), 400
+    
         image = request.files["image"]
         receiver = request.form.get("receiver")
         print("[DEBUG] Receiver value:", receiver)
         if not receiver:
             return jsonify({"error": "Missing receiver"}), 400
-        if "image" not in request.files:
-            print("[DEBUG] No image in request.files")
-            return jsonify({"error": "Missing image"}), 400
-
+        
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         filepath = os.path.join(UPLOAD_FOLDER, image.filename)
         image.save(filepath)
 
@@ -476,11 +480,12 @@ def upload_image():
 
         return jsonify({
             "status": "success",
-            "url": url_for("uploaded_file", filename=image.filename)
+            "url": url_for("uploaded_file", filename=image.filename, _external=True)
         }), 201
 
     except Exception as e:
         db.session.rollback()
+        import traceback; traceback.print_exc()
         print("[DEBUG] Failed to store image message:", e)
         return jsonify({"error": "Failed to store image"}), 500
     
@@ -511,6 +516,7 @@ def upload_audio():
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
         # Save audio file
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         filepath = os.path.join(UPLOAD_FOLDER, unique_name)
         audio.save(filepath)
 
@@ -527,12 +533,13 @@ def upload_audio():
 
         return jsonify({
             "status": "success",
-            "url": url_for("uploaded_file", filename=unique_name)
+            "url": url_for("uploaded_file", filename=unique_name, _external=True)
         }), 201
 
     except Exception as e:
         db.session.rollback()
         print("[DEBUG] Failed to store audio message:", e)
+        import traceback; traceback.print_exc()
         return jsonify({"error": "Failed to store audio"}), 500
 
 @app.route("/uploads/<filename>")

@@ -35,49 +35,62 @@ def get_all_users():
     conn.close()
     return users
 
-ph = "%s" if os.environ.get("DATABASE_URL") else "?"
-
 # --- Save text message ---
 def save_message(sender, receiver, ciphertext, nonce):
     for attempt in range(5):
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute(
-                f"INSERT INTO messages (sender, receiver, ciphertext, nonce, msg_type, timestamp) "
-                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
-                (sender, receiver, ciphertext, nonce, "text", datetime.now())
-            )
+
+            # Use ? placeholders for sqlite3
+            if os.environ.get("DATABASE_URL"):
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, ciphertext, nonce, msg_type, timestamp) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (sender, receiver, ciphertext, nonce, "text", datetime.utcnow())
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, ciphertext, nonce, msg_type, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (sender, receiver, ciphertext, nonce, "text", datetime.utcnow())
+                )
+
             conn.commit()
+            cur.close()
             conn.close()
             return
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e):
-                print("[DEBUG] DB locked, retrying...")
-                time.sleep(0.1)
-            else:
-                raise
+        except Exception as e:
+            print("[DEBUG] Error saving message:", e)
+            time.sleep(0.1)
 
 # --- Save file/image message ---
 def save_file_message(sender, receiver, file_name, msg_type):
-    for attempt in range(5):   # fixed here
+    for attempt in range(5):
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute(
-                f"INSERT INTO messages (sender, receiver, file_name, msg_type, timestamp) "
-                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
-                (sender, receiver, file_name, msg_type, datetime.now())
-            )
+
+            if os.environ.get("DATABASE_URL"):
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, file_name, msg_type, timestamp) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (sender, receiver, file_name, msg_type, datetime.utcnow())
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, file_name, msg_type, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (sender, receiver, file_name, msg_type, datetime.utcnow())
+                )
+
             conn.commit()
+            cur.close()
             conn.close()
             return
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e):
-                print("[DEBUG] DB locked, retrying...")
-                time.sleep(0.1)
-            else:
-                raise
+        except Exception as e:
+            print("[DEBUG] Error saving file message:", e)
+            time.sleep(0.1)
 
 # --- Save call log message ---
 def save_call_message(sender, receiver, status, duration=None):
@@ -85,32 +98,50 @@ def save_call_message(sender, receiver, status, duration=None):
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute(
-                f"INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp) "
-                f"VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})",
-                (sender, receiver, "call", status, duration, datetime.now())
-            )
+
+            if os.environ.get("DATABASE_URL"):
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (sender, receiver, "call", status, duration, datetime.utcnow())
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO messages (sender, receiver, msg_type, status, duration, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (sender, receiver, "call", status, duration, datetime.utcnow())
+                )
+
             conn.commit()
+            cur.close()
             conn.close()
             return
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e):
-                print("[DEBUG] DB locked, retrying...")
-                time.sleep(0.1)
-            else:
-                raise
+        except Exception as e:
+            print("[DEBUG] Error saving call message:", e)
+            time.sleep(0.1)
 
 # --- Retrieve chat history ---
 def get_chat_history(user1, user2):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute(
-        f"SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration "
-        f"FROM messages "
-        f"WHERE (sender={ph} AND receiver={ph}) OR (sender={ph} AND receiver={ph}) "
-        f"ORDER BY timestamp",
-        (user1, user2, user2, user1)
-    )
+
+    if os.environ.get("DATABASE_URL"):
+        cur.execute(
+            "SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration "
+            "FROM messages "
+            "WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s) "
+            "ORDER BY timestamp",
+            (user1, user2, user2, user1)
+        )
+    else:
+        cur.execute(
+            "SELECT sender, receiver, ciphertext, nonce, file_name, msg_type, timestamp, status, duration "
+            "FROM messages "
+            "WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?) "
+            "ORDER BY timestamp",
+            (user1, user2, user2, user1)
+        )
+
     history = cur.fetchall()
     conn.close()
     return history
