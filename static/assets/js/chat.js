@@ -132,7 +132,7 @@ socket.onmessage = async (event) => {
       document.getElementById("incomingCallPrompt").innerText = `${msg.sender} is calling...`; // CHANGE
 
       // Create peer connection
-      pc = new RTCPeerConnection();
+      pc = createAudioPeerConnection();
 
       pc.onconnectionstatechange = () => console.log("Connection state:", pc.connectionState);
       pc.oniceconnectionstatechange = () => console.log("ICE state:", pc.iceConnectionState);
@@ -819,7 +819,7 @@ async function startVideoCall(receiver) {
     localVideoStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
     document.querySelector("#videoCallInterface .main-video video").srcObject = localVideoStream;
 
-    videoPc = new RTCPeerConnection();
+    videoPc = createVideoPeerConnection();
 
     // 🔑 Add ICE candidate handler
     videoPc.onicecandidate = event => {
