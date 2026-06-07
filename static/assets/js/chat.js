@@ -178,6 +178,11 @@ socket.onmessage = async (event) => {
 
         // Add local mic/cam
         const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
+
+                // Attach local video preview
+        const localVideoEl = document.querySelector("#videoCallInterface .main-video video");
+        localVideoEl.srcObject = stream;
+        
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
         //  Apply remote description
