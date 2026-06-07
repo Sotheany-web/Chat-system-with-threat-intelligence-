@@ -14,6 +14,7 @@ let durationInterval;
 let mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
+
 let videoPc;
 let localVideoStream;
 let videoCallStartTime;
@@ -35,6 +36,26 @@ try {
   socket.addEventListener("close", (e) => console.warn("[DEBUG] WebSocket closed:", e));
 } catch (err) {
   console.error("[DEBUG] Failed to create WebSocket:", err);
+}
+
+// Helper: create audio peer connection with STUN server
+function createAudioPeerConnection() {
+  return new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" }
+      // Add TURN here for production if needed
+      // { urls: "turn:your-turn-server.com", username: "user", credential: "pass" }
+    ]
+  });
+}
+
+// Helper: create video peer connection with STUN server
+function createVideoPeerConnection() {
+  return new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" }
+    ]
+  });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
