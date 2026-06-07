@@ -101,21 +101,22 @@ socket.onmessage = async (event) => {
       // 🔹 Show incoming call UI here
       document.getElementById("callOverlay").style.display = "block";
       document.getElementById("incomingCallInterface").style.display = "block";
-      document.getElementById("incomingCallerName").innerText = msg.sender;
-      document.getElementById("incomingCallPrompt").innerText = `${msg.sender} is calling...`;
+
+      // 🔹 Hide other interfaces so receiver doesn't see caller UI
+      document.getElementById("audioCallInterface").style.display = "none";   // CHANGE
+      document.getElementById("videoCallInterface").style.display = "none";   // CHANGE
+
+      // 🔹 Populate with caller info instead of defaults
+      document.getElementById("incomingCallerName").innerText = msg.sender;   // CHANGE
+      document.getElementById("incomingCallPrompt").innerText = `${msg.sender} is calling...`; // CHANGE
 
       // Create peer connection
       pc = new RTCPeerConnection();
 
-      // Debug logs
-      pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
-      };
-      pc.oniceconnectionstatechange = () => {
-        console.log("ICE state:", pc.iceConnectionState);
-      };
+      pc.onconnectionstatechange = () => console.log("Connection state:", pc.connectionState);
+      pc.oniceconnectionstatechange = () => console.log("ICE state:", pc.iceConnectionState);
 
-      // ICE candidate handler here too
+      // ICE candidate handler
       pc.onicecandidate = event => {
         if (event.candidate) {
             console.log("Sending ICE candidate:", event.candidate);
@@ -148,17 +149,18 @@ socket.onmessage = async (event) => {
       // Save the offer SDP for later
       pendingOffer = msg.sdp;
 
-      // Accept button
+      // Accept buttonc
       document.getElementById("acceptCallBtn").onclick = async () => {
-        document.getElementById("incomingCallInterface").style.display = "none";
-        document.getElementById("audioCallInterface").style.display = "block"; // or videoCallInterface
+        // 🔹 Switch UI: hide incoming prompt, show active call interface
+        document.getElementById("incomingCallInterface").style.display = "none"; 
+        document.getElementById("audioCallInterface").style.display = "block";   
 
         // Add local mic/cam
         const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-        // Set remote description from offer
-        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        //  Apply remote description
+        await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
         // Flush queued candidates
         for (const candidate of pendingCandidates) {
@@ -181,6 +183,21 @@ socket.onmessage = async (event) => {
           receiver: msg.sender,
           sdp: answer
         }));
+
+        // 🔹 Start call timer
+        callStartTime = Date.now();
+        durationInterval = setInterval(updateCallDuration, 1000);
+
+        // 🔹 Update UI names/status
+        document.querySelector(".call-user-name").innerText = msg.sender;
+        document.getElementById("callStatus").innerText = "Connected";
+
+        // 🔹 Clear timer on hangup
+        document.getElementById("hangupBtn").onclick = () => {
+          clearInterval(durationInterval);
+          document.getElementById("callOverlay").style.display = "none";
+          pc.close();
+        };
       };
 
       // Decline button
@@ -202,7 +219,7 @@ socket.onmessage = async (event) => {
       // Flush queued candidates
       for (const candidate of pendingCandidates) {
         try {
-          await pc.addIceCandidate(candidate);
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.error("Error adding queued ICE candidate:", err);
         }
@@ -215,7 +232,7 @@ socket.onmessage = async (event) => {
       console.log("Received ICE candidate:", msg.candidate);
       if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); 
         } catch (err) {
           console.error("Error adding ICE candidate:", err);
         }
@@ -224,6 +241,24 @@ socket.onmessage = async (event) => {
         pendingCandidates.push(msg.candidate);
       }
     }
+
+    if (msg.type === "call-end" && msg.receiver === loggedInUser) {
+      // Close peer connection
+      if (pc) pc.close();
+      if (videoPc) videoPc.close();
+
+      // Clear timers
+      clearInterval(durationInterval);
+      clearInterval(videoDurationInterval);
+
+      // Update UI
+      document.getElementById("callStatus").textContent = "Call ended";
+      document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
+      document.getElementById("callOverlay").style.display = "none";
+      document.querySelector(".participants-grid").innerHTML = "";
+      document.querySelector(".call-user-name").innerText = "";
+    }
+
   } catch (err) {
     console.error("[DEBUG] Failed to process incoming message:", err, event.data);
   }
@@ -675,7 +710,7 @@ async function startAudioCall(receiver) {
         console.log("ICE state:", pc.iceConnectionState);
     };
 
-    // 🔑 Add ICE candidate handler right after creating pc
+    // Add ICE candidate handler right after creating pc
     pc.onicecandidate = event => {
         if (event.candidate) {
             socket.send(JSON.stringify({
@@ -702,9 +737,44 @@ async function startAudioCall(receiver) {
     await pc.setLocalDescription(offer);
     socket.send(JSON.stringify({ type:"call-offer", sender:loggedInUser, receiver, sdp:offer }));
 
+    document.querySelector(".call-user-name").innerText = receiver;
     document.getElementById("callStatus").textContent = "Calling...";
-    callStartTime = Date.now();
-    durationInterval = setInterval(updateCallDuration, 1000);
+    document.getElementById("callOverlay").style.display = "block";
+
+        // 🔹 Listen for answer *inside this function*
+    socket.onmessage = async (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+        // Start timer only after answer
+        callStartTime = Date.now();
+        durationInterval = setInterval(updateCallDuration, 1000);
+        document.getElementById("callStatus").textContent = "Connected";
+      }
+
+      if (msg.type === "call-end" && msg.receiver === loggedInUser) {
+        // Close peer connection
+        if (pc) pc.close();
+
+        // Clear timer
+        clearInterval(durationInterval);
+
+        // Update UI
+        document.getElementById("callStatus").textContent = "Call ended";
+        document.getElementById("callOverlay").style.display = "none";
+        document.querySelector(".call-user-name").innerText = "";
+      }
+
+      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (err) {
+          console.error("Error adding ICE candidate:", err);
+        }
+      }
+    };
 }
 
 // Audio call button
@@ -757,7 +827,7 @@ async function startVideoCall(receiver) {
     // Create offer
     const offer = await videoPc.createOffer();
     await videoPc.setLocalDescription(offer);
-
+    
     // Send offer via WebSocket
     socket.send(JSON.stringify({
         type:"call-offer",
@@ -767,10 +837,52 @@ async function startVideoCall(receiver) {
     }));
 
     // Update UI
-    document.querySelector("#videoCallInterface .call-header h2").textContent = "Video Call in Progress";
-    videoCallStartTime = Date.now();
-    videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
+    document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${receiver}...`;
+    document.getElementById("callOverlay").style.display = "block";
+
+    // 🔹 Listen for answer inside this function
+    socket.onmessage = async (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
+        await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+        // Start timer only after answer
+        videoCallStartTime = Date.now();
+        videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
+        document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
+      }
+
+      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
+        try {
+          await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (err) {
+          console.error("Error adding ICE candidate:", err);
+        }
+      }
+
+      // 🔹 Handle call-end from the other side
+      if (msg.type === "call-end" && msg.receiver === loggedInUser) {
+        if (videoPc) videoPc.close();
+        clearInterval(videoDurationInterval);
+
+        document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
+        document.querySelector(".participants-grid").innerHTML = ""; // clear tiles
+        document.getElementById("callOverlay").style.display = "none";
+      }
+    };
 }
+
+// Hangup
+document.getElementById("videoHangupBtn").onclick = () => {
+  if (videoPc) videoPc.close();
+  clearInterval(videoDurationInterval);
+  const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
+  socket.send(JSON.stringify({ type:"call-end", receiver:activeReceiver, status:"ended", duration:elapsed }));
+  document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
+  document.querySelector(".participants-grid").innerHTML = ""; // clear tiles
+  document.getElementById("callOverlay").style.display = "none";
+};
 
 //video call button
 document.getElementById("videoCallBtn").addEventListener("click", () => {
