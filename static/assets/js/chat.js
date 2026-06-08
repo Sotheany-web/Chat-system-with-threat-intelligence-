@@ -172,59 +172,111 @@ socket.onmessage = async (event) => {
 
       // Accept buttonc
       document.getElementById("acceptCallBtn").onclick = async () => {
-        // 🔹 Switch UI: hide incoming prompt, show active call interface
         document.getElementById("incomingCallInterface").style.display = "none"; 
-        document.getElementById("audioCallInterface").style.display = "block";   
 
-        // Add local mic/cam
-        const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
+          // Add local mic/cam
+          const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
 
-                // Attach local video preview
-        const localVideoEl = document.querySelector("#videoCallInterface .main-video video");
-        localVideoEl.srcObject = stream;
-        
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+          // Check call type from the offer
+          if (msg.callType === "video") {
+            // Show video interface
+            document.getElementById("videoCallInterface").style.display = "block";
 
-        //  Apply remote description
-        await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+            // Attach local preview
+            const localVideoEl = document.querySelector("#videoCallInterface .main-video video");
+            if (localVideoEl) {
+              localVideoEl.srcObject = stream;
+              localVideoEl.autoplay = true;
+              localVideoEl.playsInline = true;
+            }
 
-        // Flush queued candidates
-        for (const candidate of pendingCandidates) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (err) {
-            console.error("Error adding queued ICE candidate:", err);
+            // Add local tracks
+            stream.getTracks().forEach(track => videoPc.addTrack(track, stream));
+
+            // Apply remote description
+            await videoPc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+
+            // Flush queued candidates
+            for (const candidate of pendingCandidates) {
+              try {
+                await videoPc.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (err) {
+                console.error("Error adding queued ICE candidate:", err);
+              }
+            }
+            pendingCandidates = [];
+
+            // Create and send answer
+            const answer = await videoPc.createAnswer();
+            await videoPc.setLocalDescription(answer);
+            socket.send(JSON.stringify({
+              type: "call-answer",
+              callType: "video",
+              sender: loggedInUser,
+              receiver: msg.sender,
+              sdp: answer
+            }));
+
+            // 🔹 Update UI names/status
+            document.querySelector(".call-user-name").innerText = msg.sender;
+            document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
+
+            // Hangup cleanup
+            document.getElementById("hangupBtn").onclick = () => {
+              clearInterval(videoDurationInterval);
+              document.getElementById("callOverlay").style.display = "none";
+              stream.getTracks().forEach(track => track.stop()); // release mic/cam
+              videoPc.close();
+            };
+
+          } else {
+            // Show audio interface
+            document.getElementById("audioCallInterface").style.display = "block";
+
+            // Add local tracks
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            // Apply remote description
+            await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+
+            // Flush queued candidates
+            for (const candidate of pendingCandidates) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (err) {
+                console.error("Error adding queued ICE candidate:", err);
+              }
+            }
+            pendingCandidates = [];
+
+            // Create and send answer
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.send(JSON.stringify({
+              type: "call-answer",
+              callType: "audio",
+              sender: loggedInUser,
+              receiver: msg.sender,
+              sdp: answer
+            }));
+
+            // 🔹 Start call timer
+            callStartTime = Date.now();
+            durationInterval = setInterval(updateCallDuration, 1000);
+
+            // 🔹 Update UI names/status
+            document.querySelector(".call-user-name").innerText = msg.sender;
+            document.getElementById("callStatus").innerText = "Connected";
+
+            // Hangup cleanup
+            document.getElementById("hangupBtn").onclick = () => {
+              clearInterval(durationInterval);
+              document.getElementById("callOverlay").style.display = "none";
+              stream.getTracks().forEach(track => track.stop()); // release mic/cam
+              pc.close();
+            };
           }
-        }
-        pendingCandidates = [];
-
-        // Create answer
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        // Send answer back
-        socket.send(JSON.stringify({
-          type: "call-answer",
-          sender: loggedInUser,
-          receiver: msg.sender,
-          sdp: answer
-        }));
-
-        // 🔹 Start call timer
-        callStartTime = Date.now();
-        durationInterval = setInterval(updateCallDuration, 1000);
-
-        // 🔹 Update UI names/status
-        document.querySelector(".call-user-name").innerText = msg.sender;
-        document.getElementById("callStatus").innerText = "Connected";
-
-        // 🔹 Clear timer on hangup
-        document.getElementById("hangupBtn").onclick = () => {
-          clearInterval(durationInterval);
-          document.getElementById("callOverlay").style.display = "none";
-          pc.close();
         };
-      };
 
       // Decline button
       document.getElementById("declineCallBtn").onclick = () => {
@@ -856,18 +908,19 @@ async function startVideoCall(receiver) {
     
     // Send offer via WebSocket
     socket.send(JSON.stringify({
-        type:"call-offer",
-        sender:loggedInUser,
-        receiver,
-        sdp:offer
+      type:"call-offer",
+      callType:"video",   // 🔹 important
+      sender:loggedInUser,
+      receiver,
+      sdp:offer
     }));
 
     // Update UI
     document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${receiver}...`;
     document.getElementById("callOverlay").style.display = "block";
 
-    // 🔹 Listen for answer inside this function
-    socket.onmessage = async (event) => {
+    // Listen for answer and ICE candidates
+    socket.addEventListener("message", async (event) => {
       const msg = JSON.parse(event.data);
 
       if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
@@ -896,17 +949,29 @@ async function startVideoCall(receiver) {
         document.querySelector(".participants-grid").innerHTML = ""; // clear tiles
         document.getElementById("callOverlay").style.display = "none";
       }
-    };
+    });
 }
 
 // Hangup
 document.getElementById("videoHangupBtn").onclick = () => {
   if (videoPc) videoPc.close();
   clearInterval(videoDurationInterval);
+
+  if (localVideoStream) {
+    localVideoStream.getTracks().forEach(track => track.stop());
+  }
+
   const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
-  socket.send(JSON.stringify({ type:"call-end", receiver:activeReceiver, status:"ended", duration:elapsed }));
+  socket.send(JSON.stringify({ 
+    type:"call-end", 
+    receiver:activeReceiver, 
+    status:"ended", 
+    duration:elapsed 
+  }));
+
   document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-  document.querySelector(".participants-grid").innerHTML = ""; // clear tiles
+  document.querySelector(".participants-grid").innerHTML = "";
+  document.querySelector("#videoCallInterface .main-video video").srcObject = null;
   document.getElementById("callOverlay").style.display = "none";
 };
 
@@ -914,17 +979,11 @@ document.getElementById("videoHangupBtn").onclick = () => {
 document.getElementById("videoCallBtn").addEventListener("click", () => {
     console.log("Video call button clicked");
     startVideoCall(activeReceiver);
+
+    // 🔹 Show overlay and caller name
+    document.querySelector(".call-user-name").innerText = activeReceiver;
+    document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${activeReceiver}...`;
     document.getElementById("callOverlay").style.display = "block"; // show overlay
 });
-
-document.getElementById("videoHangupBtn").onclick = () => {
-    if (videoPc) videoPc.close();
-    clearInterval(videoDurationInterval);
-    const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
-    socket.send(JSON.stringify({ type:"call-end", receiver:activeReceiver, status:"ended", duration:elapsed }));
-    document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-    document.getElementById("callOverlay").style.display = "none"; // hide overlay
-};
-
 
 
