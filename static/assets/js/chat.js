@@ -333,27 +333,50 @@ socket.onmessage = async (event) => {
     // Call answer
     if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
       console.log("Received call-answer from", msg.sender);
-      await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
 
-      // Flush queued candidates
-      for (const candidate of pendingCandidates) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error("Error adding queued ICE candidate:", err);
+      if (msg.callType === "video" && videoPc) {
+        await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+        // Flush queued candidates for video
+        for (const candidate of pendingCandidates) {
+          try {
+            await videoPc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (err) {
+            console.error("Error adding queued ICE candidate (video):", err);
+          }
+        }
+      } else if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
+        // Flush queued candidates for audio
+        for (const candidate of pendingCandidates) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (err) {
+            console.error("Error adding queued ICE candidate (audio):", err);
+          }
         }
       }
+
       pendingCandidates = [];
     }
+
 
     // ICE candidate
     if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
       console.log("Received ICE candidate:", msg.candidate);
-      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+
+      if (msg.callType === "video" && videoPc && videoPc.remoteDescription) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); 
+          await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
         } catch (err) {
-          console.error("Error adding ICE candidate:", err);
+          console.error("Error adding ICE candidate (video):", err);
+        }
+      } else if (pc && pc.remoteDescription) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (err) {
+          console.error("Error adding ICE candidate (audio):", err);
         }
       } else {
         console.log("Queuing ICE candidate until remote description is set");
@@ -361,6 +384,8 @@ socket.onmessage = async (event) => {
       }
     }
 
+
+    // Call end
     if (msg.type === "call-end" && msg.receiver === loggedInUser) {
       // Close peer connection
       if (pc) pc.close();
