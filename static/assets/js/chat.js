@@ -221,12 +221,21 @@ socket.onmessage = async (event) => {
             document.querySelector(".call-user-name").innerText = msg.sender;
             document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
 
+            // Handle remote video
+            videoPc.ontrack = event => {
+              const remoteVideoEl = document.createElement("video");
+              remoteVideoEl.srcObject = event.streams[0];
+              remoteVideoEl.autoplay = true;
+              remoteVideoEl.playsInline = true;
+              document.querySelector(".participants-grid").appendChild(remoteVideoEl);
+            };
+
             // Hangup cleanup
             document.getElementById("hangupBtn").onclick = () => {
-              clearInterval(videoDurationInterval);
-              document.getElementById("callOverlay").style.display = "none";
-              stream.getTracks().forEach(track => track.stop()); // release mic/cam
+              stream.getTracks().forEach(track => track.stop());
               videoPc.close();
+              document.querySelector("#videoCallInterface .main-video video").srcObject = null;
+              document.getElementById("callOverlay").style.display = "none";
             };
 
           } else {
@@ -271,9 +280,9 @@ socket.onmessage = async (event) => {
             // Hangup cleanup
             document.getElementById("hangupBtn").onclick = () => {
               clearInterval(durationInterval);
-              document.getElementById("callOverlay").style.display = "none";
-              stream.getTracks().forEach(track => track.stop()); // release mic/cam
+              stream.getTracks().forEach(track => track.stop());
               pc.close();
+              document.getElementById("callOverlay").style.display = "none";
             };
           }
         };
