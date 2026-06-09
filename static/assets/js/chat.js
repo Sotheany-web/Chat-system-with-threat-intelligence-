@@ -170,7 +170,7 @@ socket.onmessage = async (event) => {
       // Save the offer SDP for later
       pendingOffer = msg.sdp;
 
-      // Accept buttonc
+      // Accept button for incoming call - this is where we set up the call after user clicks "Accept"
       document.getElementById("acceptCallBtn").onclick = async () => {
         document.getElementById("incomingCallInterface").style.display = "none"; 
 
