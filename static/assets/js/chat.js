@@ -117,6 +117,7 @@ socket.onmessage = async (event) => {
       return;
     }
 
+    // Incoming call offer
     if (msg.type === "call-offer" && msg.receiver === loggedInUser) {
 
       // 🔹 Show incoming call UI here
@@ -131,41 +132,72 @@ socket.onmessage = async (event) => {
       document.getElementById("incomingCallerName").innerText = msg.sender;   // CHANGE
       document.getElementById("incomingCallPrompt").innerText = `${msg.sender} is calling...`; // CHANGE
 
-      // Create peer connection
-      pc = createAudioPeerConnection();
+      // 🔹 Set up appropriate peer connection based on call type 
+      if (msg.callType === "video") {
+        // Create video peer connection
+        videoPc = createVideoPeerConnection();
 
-      pc.onconnectionstatechange = () => console.log("Connection state:", pc.connectionState);
-      pc.oniceconnectionstatechange = () => console.log("ICE state:", pc.iceConnectionState);
+        videoPc.onconnectionstatechange = () =>
+          console.log("Video connection state:", videoPc.connectionState);
+        videoPc.oniceconnectionstatechange = () =>
+          console.log("Video ICE state:", videoPc.iceConnectionState);
 
-      // ICE candidate handler
-      pc.onicecandidate = event => {
-        if (event.candidate) {
-            console.log("Sending ICE candidate:", event.candidate);
+        videoPc.onicecandidate = event => {
+          if (event.candidate) {
             socket.send(JSON.stringify({
-                type: "ice-candidate",
-                sender: loggedInUser,
-                receiver: msg.sender,
-                candidate: event.candidate
+              type: "ice-candidate",
+              sender: loggedInUser,
+              receiver: msg.sender,
+              candidate: event.candidate,
+              callType: "video"   // 🔹 important so you know which PC to use
             }));
-        }
-      };
+          }
+        };
 
-      // Handle remote tracks
-      pc.ontrack = event => {
-        const kind = event.track.kind;
-        if (kind === "video") {
+        videoPc.ontrack = event => {
+          const remoteVideoEl = document.createElement("video");
+          remoteVideoEl.srcObject = event.streams[0];
+          remoteVideoEl.autoplay = true;
+          remoteVideoEl.playsInline = true;
+          document.querySelector(".participants-grid").appendChild(remoteVideoEl);
+        };
+
+      } else {
+        // Keep your existing audio setup
+        pc = createAudioPeerConnection();
+
+        pc.onconnectionstatechange = () =>
+          console.log("Audio connection state:", pc.connectionState);
+        pc.oniceconnectionstatechange = () =>
+          console.log("Audio ICE state:", pc.iceConnectionState);
+
+        pc.onicecandidate = event => {
+          if (event.candidate) {
+            socket.send(JSON.stringify({
+              type: "ice-candidate",
+              sender: loggedInUser,
+              receiver: msg.sender,
+              candidate: event.candidate,
+              callType: "audio"
+            }));
+          }
+        };
+
+        pc.ontrack = event => {
+          if (event.track.kind === "video") {
             const videoEl = document.createElement("video");
             videoEl.srcObject = event.streams[0];
             videoEl.autoplay = true;
             videoEl.playsInline = true;
             document.querySelector(".participants-grid").appendChild(videoEl);
-        } else {
+          } else {
             const audioEl = document.createElement("audio");
             audioEl.srcObject = event.streams[0];
             audioEl.autoplay = true;
             document.body.appendChild(audioEl);
-        }
-    };
+          }
+        };
+      }
 
       // Save the offer SDP for later
       pendingOffer = msg.sdp;
@@ -925,7 +957,7 @@ async function startVideoCall(receiver) {
     }));
 
     // Update UI
-    document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${receiver}...`;
+    document.querySelector("videoCallInterface .call-header h2").textContent = `Calling ${receiver}...`;
     document.getElementById("callOverlay").style.display = "block";
 
     // Listen for answer and ICE candidates
@@ -938,7 +970,7 @@ async function startVideoCall(receiver) {
         // Start timer only after answer
         videoCallStartTime = Date.now();
         videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
-        document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
+        document.querySelector("videoCallInterface .call-header h2").textContent = "Connected";
       }
 
       if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
