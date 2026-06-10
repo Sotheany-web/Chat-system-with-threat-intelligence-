@@ -332,7 +332,7 @@ socket.onmessage = async (event) => {
 
     // Call answer
     if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
-      console.log("Received call-answer from", msg.sender);
+      console.log("Received call-answer from", msg.sender, "as", msg.callType);
 
       if (msg.callType === "video" && videoPc) {
         await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -345,6 +345,7 @@ socket.onmessage = async (event) => {
             console.error("Error adding queued ICE candidate (video):", err);
           }
         }
+        console.log("Video answer applied, receiver video UI should be visible");
       } else if (pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
 
@@ -356,25 +357,27 @@ socket.onmessage = async (event) => {
             console.error("Error adding queued ICE candidate (audio):", err);
           }
         }
+        console.log("Audio answer applied, receiver audio UI should be visible");
       }
 
       pendingCandidates = [];
     }
 
-
     // ICE candidate
     if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-      console.log("Received ICE candidate:", msg.candidate);
+      console.log("Received ICE candidate:", msg.candidate, "for", msg.callType);
 
       if (msg.callType === "video" && videoPc && videoPc.remoteDescription) {
         try {
           await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          console.log("Added ICE candidate to videoPc");
         } catch (err) {
           console.error("Error adding ICE candidate (video):", err);
         }
       } else if (pc && pc.remoteDescription) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          console.log("Added ICE candidate to pc");
         } catch (err) {
           console.error("Error adding ICE candidate (audio):", err);
         }
@@ -383,6 +386,7 @@ socket.onmessage = async (event) => {
         pendingCandidates.push(msg.candidate);
       }
     }
+
 
 
     // Call end
