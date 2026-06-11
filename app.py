@@ -4,6 +4,7 @@ from flask_sock import Sock
 import json
 
 from modules.database import init_db, get_db
+# from secure_chat.modules.database import init_db, get_db
 from modules.auth import register_user, login_user
 from modules.database import get_all_users, save_message, get_chat_history
 
@@ -12,18 +13,48 @@ from flask_sqlalchemy import SQLAlchemy
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-import os, base64
 from datetime import datetime
-import os, eventlet, eventlet.wsgi
+from flask import send_from_directory
+from urllib.parse import urlparse
+from werkzeug.utils import secure_filename
+from supabase import create_client, Client
+import os
+
 
 app = Flask(__name__)
 app.secret_key = "secret123"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
+
+# Use Postgres if DATABASE_URL is set, otherwise fallback to SQLite
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
+
 db = SQLAlchemy(app)
 
+# Local dev → always use project folder
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # ensure local folder exists
+
+# Supabase client (only used if USE_SUPABASE=true)
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+supabase: Client = None
+if os.environ.get("USE_SUPABASE") == "true":
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- WebSocket setup ---
 sock = Sock(app)
 
-init_db()
+# Ensure DB schema exists and print engine
+with app.app_context():
+    print("[DEBUG] DB engine:", db.engine.url)
+    init_db()
+
+connections = {}
 
 @app.route('/')
 def home():
@@ -71,7 +102,6 @@ def register():
         error = result
     return render_template('register.html', error=error)
 
-
 @app.route('/dashboard')
 def dashboard():
     print("[DEBUG] dashboard() called")
@@ -102,7 +132,7 @@ def dashboard():
     )
 
 # --- WEBSOCKET EVENTS (Flask-Sock) ---
-connections = {}
+# connections = {}
 
 @sock.route("/ws")
 def websocket(ws):
@@ -134,46 +164,137 @@ def websocket(ws):
                 continue
 
             receiver = msg.get("receiver")
-            ciphertext = msg.get("ciphertext")
-            nonce = msg.get("nonce")
 
-            if not receiver or not ciphertext or not nonce:
-                print(f"[DEBUG] Invalid message format from {username}")
-                continue
+            # --- Handle encrypted text messages ---
+            if "ciphertext" in msg and "nonce" in msg:
+                ciphertext = msg.get("ciphertext")
+                nonce = msg.get("nonce")
 
-            payload = json.dumps({
-                "sender": username,
-                "receiver": receiver,
-                "ciphertext": ciphertext,
-                "nonce": nonce,
-                "timestamp": datetime.now().isoformat()
-            })
-            # --- Save to database ---
-            try:
-                save_message(username, receiver, ciphertext, nonce)
-                print(f"[DEBUG] Saved message from {username} to {receiver}")
-            except Exception as e:
-                print(f"[DEBUG] Failed to save message: {e}")
-        
-            # Forward to receiver if connected
-            if receiver in connections:
+                if not receiver or not ciphertext or not nonce:
+                    print(f"[DEBUG] Invalid text message from {username}")
+                    continue
+
+                payload = json.dumps({
+                    "sender": username,
+                    "receiver": receiver,
+                    "ciphertext": ciphertext,
+                    "nonce": nonce,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Save to DB
                 try:
-                    connections[receiver].send(payload)
-                    print(f"[DEBUG] Forwarded message from {username} to {receiver}")
+                    save_message(username, receiver, ciphertext, nonce)
+                    print(f"[DEBUG] Saved text message from {username} to {receiver}")
                 except Exception as e:
-                    print(f"[DEBUG] Failed to send to {receiver}: {e}")
+                    print(f"[DEBUG] Failed to save text message: {e}")
 
-            # Echo back to sender (optional, for confirmation)
-            try:
-                # ws.send(payload)
-                print(f"[DEBUG] Echoed message back to {username}")
-            except Exception as e:
-                print(f"[DEBUG] Failed to echo back to {username}: {e}")
+                # Forward to receiver
+                if receiver in connections:
+                    try:
+                        connections[receiver].send(payload)
+                        print(f"[DEBUG] Forwarded text message from {username} to {receiver}")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to send text message to {receiver}: {e}")
+
+            # # --- Handle file/image messages ---
+            # elif msg.get("type") in ["file", "image"]:
+            #     print(f"[DEBUG] Received {msg['type']} message from {username}: {msg}")
+
+            #     if not receiver or not msg.get("url"):
+            #         print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver or url")
+            #         continue
+
+            #     # Extract just the filename from the URL
+            #     filename = os.path.basename(urlparse(msg["url"]).path)
+
+            #     payload = json.dumps({
+            #         "sender": username,
+            #         "receiver": receiver,
+            #         "type": msg["type"],
+            #         "url": url_for("uploaded_file", filename=filename),  # full URL for frontend
+            #         "timestamp": datetime.now().isoformat()
+            #     })
+            #     print(f"[DEBUG] Prepared payload for {msg['type']} message: {payload}")
+
+            #     try:
+            #         new_message = Message(
+            #             sender=username,
+            #             receiver=receiver,
+            #             file_name=filename,   # only filename stored in DB
+            #             msg_type=msg["type"],
+            #             timestamp=datetime.utcnow()
+            #         )
+            #         db.session.add(new_message)
+            #         db.session.commit()
+            #         print(f"[DEBUG] Saved {msg['type']} message in DB for {username} -> {receiver}")
+            #     except Exception as e:
+            #         db.session.rollback()
+            #         print(f"[DEBUG] Failed to save {msg['type']} message in DB: {e}")
+
+            #     if receiver in connections:
+            #         try:
+            #             connections[receiver].send(payload)
+            #             print(f"[DEBUG] Forwarded {msg['type']} message from {username} to {receiver}")
+            #         except Exception as e:
+            #             print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
+            #     else:
+            #         print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
+            
+            # --- Handle call signaling ---
+            elif msg.get("type") in ["call-offer", "call-answer", "ice-candidate", "call-end", "call-missed"]:
+                print(f"[DEBUG] Received {msg['type']} from {username}: {msg}")
+
+                if not receiver:
+                    print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver")
+                    continue
+
+                payload = json.dumps({
+                    "sender": username,
+                    "receiver": receiver,
+                    "type": msg["type"],
+                    "sdp": msg.get("sdp"),              # for offer/answer
+                    "candidate": msg.get("candidate"),  # for ICE
+                    "status": msg.get("status"),        # for call-end/missed
+                    "duration": msg.get("duration"),    # optional duration
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                # Save call log in DB for call-end/missed
+                if msg["type"] in ["call-end", "call-missed"]:
+                    try:
+                        new_message = Message(
+                            sender=username,
+                            receiver=receiver,
+                            msg_type="call",
+                            status=msg.get("status"),       # "ended" or "missed"
+                            duration=msg.get("duration"),   # seconds if ended
+                            timestamp=datetime.utcnow()
+                        )
+
+                        db.session.add(new_message)
+                        db.session.commit()
+                        print(f"[DEBUG] Saved call log in DB for {username} -> {receiver}")
+                    except Exception as e:
+                        db.session.rollback()
+                        print(f"[DEBUG] Failed to save call log: {e}")
+
+                # Forward signaling payload
+                if receiver in connections:
+                    try:
+                        connections[receiver].send(payload)
+                        print(f"[DEBUG] Forwarded {msg['type']} from {username} to {receiver}")
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to forward {msg['type']} to {receiver}: {e}")
+                else:
+                    print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']}")
+
 
     finally:
         if username and username in connections:
             del connections[username]
             print(f">>> {username} disconnected")
+
 
 @app.route('/messages/<chat_user>')
 def messages(chat_user):
@@ -185,28 +306,53 @@ def messages(chat_user):
     history = get_chat_history(session['user'], chat_user)
     formatted = []
     for row in history:
-        formatted.append({
+        entry = {
             "sender": row[0],
             "receiver": row[1],
             "ciphertext": row[2],
             "nonce": row[3],
-            "timestamp": row[4].isoformat() if isinstance(row[4], datetime) else row[4]
-        })
+            "file_name": row[4],
+            "msg_type": row[5],
+            "url": url_for("uploaded_file", filename=row[4]) 
+                if row[5] in ("file","image") and row[4] else None,
+            "timestamp": row[6].isoformat() if isinstance(row[6], datetime) else row[6]
+        }
+
+        # Add extra fields for call logs
+        if row[5] == "call":
+            entry["status"] = row[7] if len(row) > 7 else None   # e.g. "ended", "missed"
+            entry["duration"] = row[8] if len(row) > 8 else None # seconds or formatted string
+
+        formatted.append(entry)
 
     payload = json.dumps(formatted)
     resp = make_response(payload, 200)
     resp.headers["Content-Type"] = "application/json"
     return resp
 
-
-
+# ---------------- MODELS ----------------
 class Message(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    sender = db.Column(db.String(50))
-    receiver = db.Column(db.String(50))
+    __tablename__ = "messages"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    sender = db.Column(db.String, nullable=False)
+    receiver = db.Column(db.String, nullable=False)
+
+    # For text
     ciphertext = db.Column(db.Text)
     nonce = db.Column(db.Text)
-    timestamp = db.Column(db.DateTime)
+
+    # For file/image/audio
+    file_name = db.Column(db.Text)
+
+    # Message type: "text", "file", "image", "audio", "call"
+    msg_type = db.Column(db.String)
+
+    # For calls
+    status = db.Column(db.String)     # "ended", "missed", "declined"
+    duration = db.Column(db.Integer)  # seconds
+
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 # --- RSA key generation per user ---
 user_keys = {}
@@ -226,6 +372,7 @@ def get_public_key(username):
     )
     return pem.decode()
 
+# ---------------- UPLOAD ROUTES ----------------
 @app.route("/send", methods=["POST"])
 def send_message():
     try:
@@ -254,8 +401,237 @@ def send_message():
         print("[DEBUG] Failed to store message:", e)
         return jsonify({"error": "Failed to store message"}), 500
 
+@app.route("/upload_file", methods=["POST"])
+def upload_file():
+    print("[DEBUG] /upload_file route called")
+    print("[DEBUG] request.form:", request.form)
+    print("[DEBUG] request.files:", request.files)
+
+    if "user" not in session:
+        print("[DEBUG] Not logged in")
+        return jsonify({"error": "Not logged in"}), 403
+
+    if "file" not in request.files:
+        print("[DEBUG] No file in request.files")
+        return jsonify({"error": "Missing file"}), 400
+    
+    try:
+        file = request.files["file"]
+        receiver = request.form.get("receiver")
+        print("[DEBUG] Receiver value:", receiver)
+
+        if not receiver:
+            return jsonify({"error": "Missing receiver"}), 400
+        if "file" not in request.files:
+            print("[DEBUG] No file in request.files")
+            return jsonify({"error": "Missing file"}), 400
+
+        filename = secure_filename(file.filename)
+        ext = os.path.splitext(filename)[1] or ".dat"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
+
+        if os.environ.get("USE_SUPABASE") == "true":
+            file_bytes = file.read()
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
+        else:
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+            file.save(filepath)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
+
+        new_message = Message(
+            sender=session["user"],
+            receiver=receiver,
+            file_name=unique_name,
+            msg_type="file",
+            timestamp=datetime.utcnow()
+        )
+
+        db.session.add(new_message)
+        db.session.commit()
+        print("[DEBUG] File message stored in DB")
+
+        payload = json.dumps({
+            "sender": session["user"],
+            "receiver": receiver,
+            "file_url": url,
+            "msg_type": "file",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        if receiver in connections:
+            connections[receiver].send(payload)
+
+        return jsonify({"status": "success", "url": url}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print("[DEBUG] Failed to store file message:", e)
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Failed to store file"}), 500
+
+@app.route("/upload_image", methods=["POST"])
+def upload_image():
+    print("[DEBUG] /upload_image route called")
+    print("[DEBUG] request.form:", request.form)
+    print("[DEBUG] request.files:", request.files)
+    print("[DEBUG] DB path:", db.engine.url)
+
+    if "user" not in session:
+        return jsonify({"error": "Not logged in"}), 403
+
+    try:
+        if "image" not in request.files:
+            print("[DEBUG] No image in request.files")
+            return jsonify({"error": "Missing image"}), 400
+    
+        image = request.files["image"]
+        receiver = request.form.get("receiver")
+        print("[DEBUG] Receiver value:", receiver)
+        if not receiver:
+            return jsonify({"error": "Missing receiver"}), 400
+        
+        filename = secure_filename(image.filename)
+        ext = os.path.splitext(filename)[1] or ".jpg"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
+
+        if os.environ.get("USE_SUPABASE") == "true":
+            file_bytes = image.read()
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
+        else:
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+            image.save(filepath)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
+
+        new_message = Message(
+            sender=session["user"],
+            receiver=receiver,
+            file_name=unique_name,
+            msg_type="image",
+            timestamp=datetime.utcnow()
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify({"status": "success", "url": url}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback; traceback.print_exc()
+        print("[DEBUG] Failed to store image message:", e)
+        return jsonify({"error": "Failed to store image"}), 500
+
+# --- New route for audio uploads ---
+@app.route("/upload_audio", methods=["POST"])
+def upload_audio():
+    print("[DEBUG] /upload_audio route called")
+    print("[DEBUG] request.form:", request.form)
+    print("[DEBUG] request.files:", request.files)
+
+    if "user" not in session:
+        return jsonify({"error": "Not logged in"}), 403
+
+    try:
+        audio = request.files.get("audio")
+        receiver = request.form.get("receiver")
+        print("[DEBUG] Receiver value:", receiver)
+
+        if not receiver:
+            return jsonify({"error": "Missing receiver"}), 400
+        if not audio:
+            print("[DEBUG] No audio in request.files")
+            return jsonify({"error": "Missing audio"}), 400
+        
+        ext = os.path.splitext(secure_filename(audio.filename))[1] or ".webm"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        unique_name = f"{session['user']}_{timestamp}{ext}"
+
+        if os.environ.get("USE_SUPABASE") == "true":
+            file_bytes = audio.read()
+            supabase.storage.from_("uploads").upload(unique_name, file_bytes)
+            url = supabase.storage.from_("uploads").get_public_url(unique_name)
+        else:
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+            audio.save(filepath)
+            url = url_for("uploaded_file", filename=unique_name, _external=True)
+
+        new_message = Message(
+            sender=session["user"],
+            receiver=receiver,
+            file_name=unique_name,
+            msg_type="audio",
+            timestamp=datetime.utcnow()
+        )
+
+        db.session.add(new_message)
+        db.session.commit()
+        print("[DEBUG] Audio message stored in DB")
+
+        # Optional: broadcast to receiver only
+        payload = json.dumps({
+            "sender": session["user"],
+            "receiver": receiver,
+            "url": url,
+            "msg_type": "audio",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        if receiver in connections:
+            connections[receiver].send(payload)
+
+        return jsonify({"status": "success", "url": url}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback; traceback.print_exc()
+        print("[DEBUG] Failed to store audio message:", e)
+        return jsonify({"error": "Failed to store audio"}), 500
+
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+    if os.environ.get("USE_SUPABASE") == "true":
+        # In Supabase mode, files are not served locally.
+        # Just redirect to the Supabase public URL.
+        url = supabase.storage.from_("uploads").get_public_url(filename)
+        return redirect(url)
+    else:
+        # Local mode: serve from UPLOAD_FOLDER
+        return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False)
+
+# Temporary debug route
+@app.route("/debug-messages")
+def debug_messages():
+    conn = get_db()
+    cur = conn.cursor()
+    # Select all columns from the messages table
+    cur.execute("SELECT * FROM messages ORDER BY timestamp DESC")
+    rows = cur.fetchall()
+    conn.close()
+
+    # Convert rows into a list of dicts for readability
+    messages = []
+    for row in rows:
+        messages.append({
+            "id": row[0],
+            "sender": row[1],
+            "receiver": row[2],
+            "ciphertext": row[3],
+            "nonce": row[4],
+            "file_name": row[5],
+            "msg_type": row[6],
+            "status": row[7],
+            "duration": row[8],
+            "timestamp": row[9]
+        })
+
+    return {"messages": messages}
+
+# ---------------- STARTUP ----------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+   
+    port = int(os.environ.get("PORT", 5000))  # Render sets PORT
+    app.run(host="0.0.0.0", port=port, debug=True)
 # if __name__ == "__main__":
 #     port = int(os.environ.get("PORT", 5000))
 #     eventlet.wsgi.server(eventlet.listen(("0.0.0.0", port)), app)
