@@ -897,6 +897,7 @@ async function startAudioCall(receiver) {
         if (event.candidate) {
             socket.send(JSON.stringify({
                 type: "ice-candidate",
+                callType: "audio",   // defined calltype
                 sender: loggedInUser,
                 receiver,
                 candidate: event.candidate
@@ -917,23 +918,38 @@ async function startAudioCall(receiver) {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket.send(JSON.stringify({ type:"call-offer", sender:loggedInUser, receiver, sdp:offer }));
+    socket.send(JSON.stringify({ 
+      type:"call-offer", 
+      callType:"audio", // for receiver to know which interface to show
+      sender:loggedInUser, 
+      receiver, 
+      sdp:offer 
+    }));
 
+    // Update UI immediately for caller
     document.querySelector(".call-user-name").innerText = receiver;
     document.getElementById("callStatus").textContent = "Calling...";
     document.getElementById("callOverlay").style.display = "block";
 
-        // 🔹 Listen for answer *inside this function*
-    socket.onmessage = async (event) => {
+    // Listen for signaling
+    socket.addEventListener("message", async (event) => {
       const msg = JSON.parse(event.data);
 
-      if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
+      // Handle call answer for audio
+      if (msg.type === "call-answer" && msg.receiver === loggedInUser && msg.callType === "audio") {
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-        // Start timer only after answer
         callStartTime = Date.now();
         durationInterval = setInterval(updateCallDuration, 1000);
         document.getElementById("callStatus").textContent = "Connected";
+      }
+
+      // Handle ICE candidates for audio
+      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser && msg.callType === "audio") {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        } catch (err) {
+          console.error("Error adding ICE candidate:", err);
+        }
       }
 
       if (msg.type === "call-end" && msg.receiver === loggedInUser) {
@@ -949,14 +965,14 @@ async function startAudioCall(receiver) {
         document.querySelector(".call-user-name").innerText = "";
       }
 
-      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        } catch (err) {
-          console.error("Error adding ICE candidate:", err);
-        }
+      if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "audio") {
+        if (pc) pc.close();
+        clearInterval(durationInterval);
+        document.getElementById("callStatus").textContent = "Call ended";
+        document.getElementById("callOverlay").style.display = "none";
+        document.querySelector(".call-user-name").innerText = "";
       }
-    };
+    });
 }
 
 // Audio call button
@@ -970,7 +986,13 @@ document.getElementById("hangupBtn").onclick = () => {
     if (pc) pc.close();
     clearInterval(durationInterval);
     const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
-    socket.send(JSON.stringify({ type:"call-end", receiver:activeReceiver, status:"ended", duration:elapsed }));
+    socket.send(JSON.stringify({ 
+      type:"call-end",
+      callType:"audio", 
+      receiver:activeReceiver, 
+      status:"ended", 
+      duration:elapsed 
+    }));
     document.getElementById("callStatus").textContent = "Call ended";
     document.getElementById("callOverlay").style.display = "none"; // hide overlay
 };
@@ -980,13 +1002,14 @@ async function startVideoCall(receiver) {
     localVideoStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
     document.querySelector("#videoCallInterface .main-video video").srcObject = localVideoStream;
 
-    videoPc = createVideoPeerConnection();
+    videoPc = new RTCPeerConnection();
 
     // 🔑 Add ICE candidate handler
     videoPc.onicecandidate = event => {
         if (event.candidate) {
             socket.send(JSON.stringify({
                 type: "ice-candidate",
+                callType:"video",
                 sender: loggedInUser,
                 receiver,
                 candidate: event.candidate
@@ -1021,38 +1044,35 @@ async function startVideoCall(receiver) {
 
     // Update UI
     document.querySelector(".call-user-name").innerText = receiver;
-    document.getElementById("callStatus").textContent = "Calling...";
+    document.querySelector("#videoCallInterface .call-header h2").textContent = "Calling...";
     document.getElementById("callOverlay").style.display = "block";
 
     // Listen for answer and ICE candidates
     socket.addEventListener("message", async (event) => {
       const msg = JSON.parse(event.data);
 
-      if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
-        await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-        // Start timer only after answer
-        videoCallStartTime = Date.now();
-        videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
-        document.querySelector("videoCallInterface .call-header h2").textContent = "Connected";
+      if (msg.type === "call-answer" && msg.receiver === loggedInUser && msg.callType === "video") {
+          await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          videoCallStartTime = Date.now();
+          videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
+          document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
       }
 
-      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-        try {
-          await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        } catch (err) {
-          console.error("Error adding ICE candidate:", err);
-        }
+      if (msg.type === "ice-candidate" && msg.receiver === loggedInUser && msg.callType === "video") {
+          try {
+              await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (err) {
+              console.error("Error adding ICE candidate:", err);
+          }
       }
 
       // 🔹 Handle call-end from the other side
-      if (msg.type === "call-end" && msg.receiver === loggedInUser) {
-        if (videoPc) videoPc.close();
-        clearInterval(videoDurationInterval);
-
-        document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-        document.querySelector(".participants-grid").innerHTML = ""; // clear tiles
-        document.getElementById("callOverlay").style.display = "none";
+      if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "video") {
+          if (videoPc) videoPc.close();
+          clearInterval(videoDurationInterval);
+          document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
+          document.querySelector(".participants-grid").innerHTML = "";
+          document.getElementById("callOverlay").style.display = "none";
       }
     });
 }
