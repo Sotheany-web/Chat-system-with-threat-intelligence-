@@ -1,4 +1,4 @@
-console.log("chat.js loaded");
+﻿console.log("chat.js loaded");
 
 let activeReceiver = null;  // track who you're chatting with
 
@@ -38,31 +38,38 @@ try {
   console.error("[DEBUG] Failed to create WebSocket:", err);
 }
 
-// Helper: create audio peer connection with STUN server
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  }
+];
+
 function createAudioPeerConnection() {
-  return new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" }
-      // Add TURN here for production if needed
-      // { urls: "turn:your-turn-server.com", username: "user", credential: "pass" }
-    ]
-  });
+  return new RTCPeerConnection({ iceServers: ICE_SERVERS });
 }
 
-// Helper: create video peer connection with STUN server
 function createVideoPeerConnection() {
-  return new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" }
-    ]
-  });
+  return new RTCPeerConnection({ iceServers: ICE_SERVERS });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
-    await generateAESKey(); // ensure aesKey is ready
     const savedChatUser = localStorage.getItem("lastChatUser");
     if (savedChatUser) {
+      await generateAESKey(savedChatUser);
       loadChatHistory(savedChatUser);
     }
   } catch (err) {
@@ -71,26 +78,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 let pendingCandidates = [];
+let pendingOffer = null;
 
 // decrypt message before displaying (receiver side)
 socket.onmessage = async (event) => {
   try {
     const msg = JSON.parse(event.data);
 
-    if (msg.type === "file") {
-      const link = document.createElement("a");
-      link.href = msg.url;
-      link.textContent = "Download file";
-      link.target = "_blank";
-      document.getElementById("chatMessages").appendChild(link);
-      return;
-    }
-
-    if (msg.type === "image") {
-      const img = document.createElement("img");
-      img.src = msg.url;
-      img.style.maxWidth = "200px";
-      document.getElementById("chatMessages").appendChild(img);
+    if (msg.type === "file" || msg.type === "image") {
+      const _imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
+      const _who = msg.sender === loggedInUser ? "Me" : msg.sender;
+      if (msg.type === "image") {
+        addMessageToUI(_who, '<img src="' + msg.url + '" style="max-width:200px; border-radius:8px;">', null);
+      } else {
+        const _ext = (msg.url || "").split(".").pop().split("?")[0].toLowerCase();
+        if (_imgExts.includes(_ext)) {
+          addMessageToUI(_who, '<img src="' + msg.url + '" style="max-width:200px; border-radius:8px;">', null);
+        } else {
+          addMessageToUI(_who, '<a href="' + msg.url + '" target="_blank">Download file</a>', null);
+        }
+      }
       return;
     }
 
@@ -166,7 +173,7 @@ socket.onmessage = async (event) => {
           remoteVideoEl.srcObject = event.streams[0];
           remoteVideoEl.autoplay = true;
           remoteVideoEl.playsInline = true;
-          document.querySelector(".participants-grid").appendChild(remoteVideoEl);
+          addRemoteVideoTile(event.streams[0], msg.sender || "");
         };
 
       } else {
@@ -197,7 +204,7 @@ socket.onmessage = async (event) => {
             videoEl.srcObject = event.streams[0];
             videoEl.autoplay = true;
             videoEl.playsInline = true;
-            document.querySelector(".participants-grid").appendChild(videoEl);
+            addRemoteVideoTile(event.streams[0], msg.sender || "");
           } else {
             const audioEl = document.createElement("audio");
             audioEl.srcObject = event.streams[0];
@@ -266,8 +273,8 @@ socket.onmessage = async (event) => {
             console.log("[Receiver] Sent video call-answer to caller.");
 
             // 🔹 Update UI names/status
-            document.querySelector(".call-user-name").innerText = msg.sender;
-            document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
+            if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
+            document.getElementById("videoCallTitle").textContent = "Connected";
 
             // Handle remote video
             videoPc.ontrack = event => {
@@ -275,14 +282,14 @@ socket.onmessage = async (event) => {
               remoteVideoEl.srcObject = event.streams[0];
               remoteVideoEl.autoplay = true;
               remoteVideoEl.playsInline = true;
-              document.querySelector(".participants-grid").appendChild(remoteVideoEl);
+              addRemoteVideoTile(event.streams[0], msg.sender || "");
             };
 
             // Hangup cleanup
             document.getElementById("hangupBtn").onclick = () => {
               stream.getTracks().forEach(track => track.stop());
               videoPc.close();
-              document.querySelector("#videoCallInterface .main-video video").srcObject = null;
+              clearVideoCall();
               document.getElementById("callOverlay").style.display = "none";
             };
 
@@ -324,7 +331,7 @@ socket.onmessage = async (event) => {
             durationInterval = setInterval(updateCallDuration, 1000);
 
             // 🔹 Update UI names/status
-            document.querySelector(".call-user-name").innerText = msg.sender;
+            if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
             document.getElementById("callStatus").innerText = "Connected";
 
             // Hangup cleanup
@@ -348,65 +355,6 @@ socket.onmessage = async (event) => {
       };
     }
 
-    // Call answer
-    if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
-      console.log("Received call-answer from", msg.sender, "as", msg.callType);
-
-      if (msg.callType === "video" && videoPc) {
-        await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-        // Flush queued candidates for video
-        for (const candidate of pendingCandidates) {
-          try {
-            await videoPc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (err) {
-            console.error("Error adding queued ICE candidate (video):", err);
-          }
-        }
-        console.log("Video answer applied, receiver video UI should be visible");
-      } else if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-        // Flush queued candidates for audio
-        for (const candidate of pendingCandidates) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (err) {
-            console.error("Error adding queued ICE candidate (audio):", err);
-          }
-        }
-        console.log("Audio answer applied, receiver audio UI should be visible");
-      }
-
-      pendingCandidates = [];
-    }
-
-    // ICE candidate
-    if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-      console.log("Received ICE candidate:", msg.candidate, "for", msg.callType);
-
-      if (msg.callType === "video" && videoPc && videoPc.remoteDescription) {
-        try {
-          await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          console.log("Added ICE candidate to videoPc");
-        } catch (err) {
-          console.error("Error adding ICE candidate (video):", err);
-        }
-      } else if (pc && pc.remoteDescription) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          console.log("Added ICE candidate to pc");
-        } catch (err) {
-          console.error("Error adding ICE candidate (audio):", err);
-        }
-      } else {
-        console.log("Queuing ICE candidate until remote description is set");
-        pendingCandidates.push(msg.candidate);
-      }
-    }
-
-
-
     // Call end
     if (msg.type === "call-end" && msg.receiver === loggedInUser) {
       // Close peer connection
@@ -419,10 +367,10 @@ socket.onmessage = async (event) => {
 
       // Update UI
       document.getElementById("callStatus").textContent = "Call ended";
-      document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
+      document.getElementById("videoCallTitle").textContent = "Call Ended";
       document.getElementById("callOverlay").style.display = "none";
-      document.querySelector(".participants-grid").innerHTML = "";
-      document.querySelector(".call-user-name").innerText = "";
+      clearVideoCall();
+      if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
     }
 
   } catch (err) {
@@ -455,8 +403,12 @@ async function loadChatHistory(user) {
     const history = await res.json();
     console.log("Fetched history for", user, ":", history);
 
+    let lastPreview = null;
+    let lastMsgTime = null;
+
     for (const msg of history) {
       const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+      lastMsgTime = msg.timestamp;
 
       if (msg.msg_type === "text") {
         let plaintext;
@@ -467,34 +419,53 @@ async function loadChatHistory(user) {
           plaintext = "[Decryption failed]";
         }
         addMessageToUI(who, plaintext, msg.timestamp);
+        lastPreview = plaintext.length > 40 ? plaintext.slice(0, 40) + "..." : plaintext;
 
       } else if (msg.msg_type === "file") {
-        addMessageToUI(who,
-          `<a href="/uploads/${msg.file_name}" target="_blank">Download file</a>`,
-          msg.timestamp);
-
-      } else if (msg.msg_type === "image") {
-        addMessageToUI(who,
-          `<img src="/uploads/${msg.file_name}" style="max-width:200px;">`,
-          msg.timestamp);
-      } else if (msg.msg_type === "audio") {
-        addMessageToUI(who,
-          `<audio controls src="/uploads/${msg.file_name}"></audio>`,
-          msg.timestamp);
-      } else if (msg.msg_type === "call") {
-        // Render call logs
-        let callInfo = "";
-        if (msg.status === "ended") {
-          callInfo = `📞 Call ended • Duration: ${msg.duration}`;
-        } else if (msg.status === "missed") {
-          callInfo = `📞 Missed call`;
-        } else if (msg.status === "declined") {
-          callInfo = `📞 Call declined`;
+        const imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
+        const ext = (msg.file_name || "").split(".").pop().toLowerCase();
+        if (imgExts.includes(ext)) {
+          addMessageToUI(who, '<img src="/uploads/' + msg.file_name + '" style="max-width:200px; border-radius:8px;">', msg.timestamp);
+          lastPreview = "Photo";
+        } else {
+          addMessageToUI(who, '<a href="/uploads/' + msg.file_name + '" target="_blank">Download file</a>', msg.timestamp);
+          lastPreview = "File";
         }
 
-        // Show with timestamp
-        addMessageToUI(who, callInfo, msg.timestamp);
+      } else if (msg.msg_type === "image") {
+        addMessageToUI(who, '<img src="/uploads/' + msg.file_name + '" style="max-width:200px; border-radius:8px;">', msg.timestamp);
+        lastPreview = "Photo";
+
+      } else if (msg.msg_type === "audio") {
+        addMessageToUI(who, '<audio controls src="/uploads/' + msg.file_name + '"></audio>', msg.timestamp);
+        lastPreview = "Voice message";
+
+      } else if (msg.msg_type === "call") {
+        let callInfo = "";
+        if (msg.status === "ended") {
+          const secs = msg.duration || 0;
+          const mm = String(Math.floor(secs / 60)).padStart(2, "0");
+          const ss = String(secs % 60).padStart(2, "0");
+          callInfo = "Call ended " + mm + ":" + ss;
+          lastPreview = callInfo;
+        } else if (msg.status === "missed") {
+          callInfo = "Missed call from " + msg.sender;
+          lastPreview = callInfo;
+        } else if (msg.status === "declined") {
+          callInfo = "Call declined";
+          lastPreview = callInfo;
+        }
+        if (callInfo) addCallLogToUI(callInfo, msg.timestamp);
       }
+    }
+
+    // Update sidebar user-item preview
+    const sidebarItem = document.querySelector('.user-item[data-user="' + user + '"]');
+    if (sidebarItem) {
+      const msgEl = sidebarItem.querySelector(".user-message");
+      if (msgEl && lastPreview) msgEl.textContent = lastPreview;
+      const timeEl = sidebarItem.querySelector(".message-time");
+      if (timeEl && lastMsgTime) timeEl.textContent = formatTimestamp(lastMsgTime);
     }
 
   } catch (err) {
@@ -511,9 +482,14 @@ document.addEventListener("click", (e) => {
     const user = item.dataset.user;
     console.log("[DEBUG] Sidebar clicked:", item, user);
     if (user) {
-      activeReceiver = user;   // <-- FIX: set receiver here
+      activeReceiver = user;
       console.log("[DEBUG] activeReceiver set to:", activeReceiver);
-      loadChatHistory(user);
+      document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      generateAESKey(user).then(() => loadChatHistory(user)).catch(err => {
+        console.error("[DEBUG] Failed to init AES key for", user, err);
+        loadChatHistory(user);
+      });
     } else {
       console.warn("[DEBUG] Clicked user-item without data-user attribute");
     }
@@ -521,6 +497,13 @@ document.addEventListener("click", (e) => {
 });
 
 // Add message bubble to UI
+function formatTimestamp(ts) {
+  if (!ts) return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const d = new Date(ts);
+  if (isNaN(d)) return ts;
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function addMessageToUI(sender, content, timestamp=null) {
   const chatBox = document.getElementById("chatMessages");
   const messageDiv = document.createElement("div");
@@ -530,11 +513,32 @@ function addMessageToUI(sender, content, timestamp=null) {
           <div class="message-content">
               <div class="message-text">${content}</div>
           </div>
-          <div class="message-timestamp">${timestamp || new Date().toLocaleTimeString()}</div>
+          <div class="message-timestamp">${formatTimestamp(timestamp)}</div>
       </div>`;
   chatBox.appendChild(messageDiv);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-  // Auto-scroll to bottom like WhatsApp
+function addCallLogToUI(callInfo, timestamp=null) {
+  const chatBox = document.getElementById("chatMessages");
+  const div = document.createElement("div");
+  div.className = "message call-log";
+
+  const content = document.createElement("div");
+  content.className = "call-log-content";
+
+  const text = document.createElement("span");
+  text.className = "call-log-text";
+  text.textContent = callInfo;
+
+  const time = document.createElement("span");
+  time.className = "call-log-time";
+  time.textContent = formatTimestamp(timestamp);
+
+  content.appendChild(text);
+  content.appendChild(time);
+  div.appendChild(content);
+  chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
@@ -594,10 +598,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
             console.log("[DEBUG] Selected file:", file.name);
-            // Show preview
             previewFile(file);
-            // upload 
-            sendFile(file);
+            if (file.type.startsWith("image/")) {
+                sendImage(file);
+            } else {
+                sendFile(file);
+            }
         } else {
             console.warn("[DEBUG] No file selected");
         }
@@ -699,10 +705,28 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("callStatus").textContent = "Call ended";
     });
 
-    // Video call controls
-    document.getElementById("videoHangupBtn").addEventListener("click", () => {
-        if (pc) pc.close();
-        document.querySelector(".call-header h2").textContent = "Video call ended";
+    // Video mic toggle
+    document.getElementById("videoMuteBtn").addEventListener("click", () => {
+        if (localVideoStream) {
+            const track = localVideoStream.getAudioTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                const icon = document.querySelector("#videoMuteBtn i");
+                if (icon) icon.className = track.enabled ? "fas fa-microphone" : "fas fa-microphone-slash";
+            }
+        }
+    });
+
+    // Video camera toggle
+    document.getElementById("videoCamBtn").addEventListener("click", () => {
+        if (localVideoStream) {
+            const track = localVideoStream.getVideoTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                const icon = document.querySelector("#videoCamBtn i");
+                if (icon) icon.className = track.enabled ? "fas fa-video" : "fas fa-video-slash";
+            }
+        }
     });
 });
 
@@ -894,13 +918,39 @@ function updateVideoCallDuration() {
     const h = String(Math.floor(elapsed / 3600)).padStart(2, "0");
     const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
     const s = String(elapsed % 60).padStart(2, "0");
-    document.querySelector("#videoCallInterface .call-info p").textContent = `Duration • ${h}:${m}:${s}`;
+    const meta = document.getElementById("videoCallMeta");
+    if (meta) meta.textContent = `2 participants • ${h}:${m}:${s}`;
+}
+
+function addRemoteVideoTile(stream, name) {
+    const grid = document.getElementById("remoteVideoGrid");
+    if (!grid) return;
+    const tile = document.createElement("div");
+    tile.className = "participant";
+    tile.dataset.name = name;
+    const vid = document.createElement("video");
+    vid.srcObject = stream;
+    vid.autoplay = true;
+    vid.playsInline = true;
+    const label = document.createElement("div");
+    label.className = "name";
+    label.textContent = name;
+    tile.appendChild(vid);
+    tile.appendChild(label);
+    grid.appendChild(tile);
+}
+
+function clearVideoCall() {
+    const grid = document.getElementById("remoteVideoGrid");
+    if (grid) grid.innerHTML = "";
+    const localVid = document.getElementById("localVideoEl");
+    if (localVid) localVid.srcObject = null;
 }
 
 // Audio Call
 async function startAudioCall(receiver) {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    pc = new RTCPeerConnection();
+    pc = createAudioPeerConnection();
 
     // 🔍 Debug logs
     pc.onconnectionstatechange = () => {
@@ -945,8 +995,13 @@ async function startAudioCall(receiver) {
     }));
 
     // Update UI immediately for caller
-    document.querySelector(".call-user-name").innerText = receiver;
+    const callUserName = document.getElementById("callUserName");
+    if (callUserName) callUserName.textContent = receiver;
+    const callAvatar = document.getElementById("callAvatar");
+    if (callAvatar) callAvatar.textContent = receiver[0].toUpperCase();
     document.getElementById("callStatus").textContent = "Calling...";
+    document.getElementById("audioCallInterface").style.display = "flex";
+    document.getElementById("videoCallInterface").style.display = "none";
     document.getElementById("callOverlay").style.display = "block";
 
     // Listen for signaling
@@ -980,7 +1035,7 @@ async function startAudioCall(receiver) {
     //     // Update UI
     //     document.getElementById("callStatus").textContent = "Call ended";
     //     document.getElementById("callOverlay").style.display = "none";
-    //     document.querySelector(".call-user-name").innerText = "";
+    //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
     //   }
 
     //   if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "audio") {
@@ -988,7 +1043,7 @@ async function startAudioCall(receiver) {
     //     clearInterval(durationInterval);
     //     document.getElementById("callStatus").textContent = "Call ended";
     //     document.getElementById("callOverlay").style.display = "none";
-    //     document.querySelector(".call-user-name").innerText = "";
+    //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
     //   }
     // });
 }
@@ -1001,115 +1056,72 @@ document.getElementById("audioCallBtn").addEventListener("click", () => {
 });
 
 document.getElementById("hangupBtn").onclick = () => {
-    if (pc) pc.close();
+    if (pc) { pc.close(); pc = null; }
     clearInterval(durationInterval);
-    const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
-    socket.send(JSON.stringify({ 
-      type:"call-end",
-      callType:"audio", 
-      receiver:activeReceiver, 
-      status:"ended", 
-      duration:elapsed 
+    const elapsed = callStartTime ? Math.max(0, Math.floor((Date.now() - callStartTime) / 1000)) : 0;
+    callStartTime = null;
+    socket.send(JSON.stringify({
+      type: "call-end",
+      callType: "audio",
+      sender: loggedInUser,
+      receiver: activeReceiver,
+      status: "ended",
+      duration: elapsed
     }));
-    document.getElementById("callStatus").textContent = "Call ended";
-    document.getElementById("callOverlay").style.display = "none"; // hide overlay
+    if (elapsed > 0) {
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const ss = String(elapsed % 60).padStart(2, "0");
+      addCallLogToUI(`📞 Call ended • ${mm}:${ss}`);
+    }
+    document.getElementById("audioCallInterface").style.display = "none";
+    document.getElementById("callOverlay").style.display = "none";
 };
 
 // Video Call
 async function startVideoCall(receiver) {
-  console.log("[VideoCall] Starting video call with:", receiver);
+  localVideoStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 
-  localVideoStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
-  console.log("[VideoCall] Got local media stream:", localVideoStream);
+  const localVid = document.getElementById("localVideoEl");
+  if (localVid) localVid.srcObject = localVideoStream;
+  const localLabel = document.getElementById("localVideoLabel");
+  if (localLabel) localLabel.textContent = loggedInUser + " (You)";
 
-  document.querySelector("#videoCallInterface .main-video video").srcObject = localVideoStream;
+  videoPc = createVideoPeerConnection();
 
-  videoPc = new RTCPeerConnection();
-  console.log("[VideoCall] Created RTCPeerConnection:", videoPc);
-
-  // 🔑 Add ICE candidate handler
   videoPc.onicecandidate = event => {
-    console.log("[VideoCall] ICE candidate event:", event.candidate);
     if (event.candidate) {
       socket.send(JSON.stringify({
         type: "ice-candidate",
-        callType:"video",
+        callType: "video",
         sender: loggedInUser,
         receiver,
         candidate: event.candidate
       }));
-      console.log("[VideoCall] Sent ICE candidate to receiver:", receiver);
     }
   };
 
-  // Add local tracks
-  localVideoStream.getTracks().forEach(track => {
-    videoPc.addTrack(track, localVideoStream);
-    console.log("[VideoCall] Added local track:", track.kind);
-  });
+  localVideoStream.getTracks().forEach(track => videoPc.addTrack(track, localVideoStream));
 
-  // Handle remote tracks    
   videoPc.ontrack = event => {
-    console.log("[VideoCall] Remote track received:", event.streams);
-    const remoteVideoEl = document.createElement("video");
-    remoteVideoEl.srcObject = event.streams[0];
-    remoteVideoEl.autoplay = true;
-    remoteVideoEl.playsInline = true;
-    document.querySelector(".participants-grid").appendChild(remoteVideoEl);
-    console.log("[VideoCall] Remote video element appended.");
+    addRemoteVideoTile(event.streams[0], receiver);
   };
 
-  // Create offer
   const offer = await videoPc.createOffer();
-  console.log("[VideoCall] Created offer:", offer);
-
   await videoPc.setLocalDescription(offer);
-  console.log("[VideoCall] Set local description.");
-  
-  // Send offer via WebSocket
+
   socket.send(JSON.stringify({
-    type:"call-offer",
-    callType:"video",   // 🔹 important
-    sender:loggedInUser,
+    type: "call-offer",
+    callType: "video",
+    sender: loggedInUser,
     receiver,
-    sdp:offer
+    sdp: offer
   }));
-  console.log("[VideoCall] Sent call-offer with callType: video to:", receiver);
 
-  // Update UI
-  document.querySelector(".call-user-name").innerText = receiver;
-  document.querySelector("#videoCallInterface .call-header h2").textContent = "Calling...";
+  const title = document.getElementById("videoCallTitle");
+  if (title) title.textContent = "Calling " + receiver + "...";
+  document.getElementById("audioCallInterface").style.display = "none";
+  document.getElementById("videoCallInterface").style.display = "block";
   document.getElementById("callOverlay").style.display = "block";
-  console.log("[VideoCall] Updated UI to show 'Calling...'");
-
-  // // Listen for answer and ICE candidates
-  // socket.addEventListener("message", async (event) => {
-  //   const msg = JSON.parse(event.data);
-
-  //   if (msg.type === "call-answer" && msg.receiver === loggedInUser && msg.callType === "video") {
-  //       await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-  //       videoCallStartTime = Date.now();
-  //       videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
-  //       document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
-  //   }
-
-  //   if (msg.type === "ice-candidate" && msg.receiver === loggedInUser && msg.callType === "video") {
-  //       try {
-  //           await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-  //       } catch (err) {
-  //           console.error("Error adding ICE candidate:", err);
-  //       }
-  //   }
-
-  //   // 🔹 Handle call-end from the other side
-  //   if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "video") {
-  //       if (videoPc) videoPc.close();
-  //       clearInterval(videoDurationInterval);
-  //       document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-  //       document.querySelector(".participants-grid").innerHTML = "";
-  //       document.getElementById("callOverlay").style.display = "none";
-  //   }
-  // });
 }
 
 // Audio signaling listener
@@ -1153,7 +1165,7 @@ socket.addEventListener("message", async (event) => {
 
     videoCallStartTime = Date.now();
     videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
-    document.querySelector("#videoCallInterface .call-header h2").textContent = "Connected";
+    document.getElementById("videoCallTitle").textContent = "Connected";
     console.log("[VideoCall] Call connected, timer started.");
   }
 
@@ -1164,8 +1176,8 @@ socket.addEventListener("message", async (event) => {
   if (msg.type === "call-end" && msg.receiver === loggedInUser) {
     videoPc.close();
     clearInterval(videoDurationInterval);
-    document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-    document.querySelector(".participants-grid").innerHTML = "";
+    document.getElementById("videoCallTitle").textContent = "Call Ended";
+    clearVideoCall();
     document.getElementById("callOverlay").style.display = "none";
   }
 });
@@ -1180,17 +1192,24 @@ document.getElementById("videoHangupBtn").onclick = () => {
     localVideoStream.getTracks().forEach(track => track.stop());
   }
 
-  const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
-  socket.send(JSON.stringify({ 
-    type:"call-end", 
-    receiver:activeReceiver, 
-    status:"ended", 
-    duration:elapsed 
+  const elapsed = videoCallStartTime ? Math.max(0, Math.floor((Date.now() - videoCallStartTime) / 1000)) : 0;
+  videoCallStartTime = null;
+  socket.send(JSON.stringify({
+    type: "call-end",
+    callType: "video",
+    sender: loggedInUser,
+    receiver: activeReceiver,
+    status: "ended",
+    duration: elapsed
   }));
-
-  document.querySelector("#videoCallInterface .call-header h2").textContent = "Call Ended";
-  document.querySelector(".participants-grid").innerHTML = "";
-  document.querySelector("#videoCallInterface .main-video video").srcObject = null;
+  if (elapsed > 0) {
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    addCallLogToUI(`📹 Video call ended • ${mm}:${ss}`);
+  }
+  if (videoPc) { videoPc.close(); videoPc = null; }
+  clearVideoCall();
+  document.getElementById("videoCallInterface").style.display = "none";
   document.getElementById("callOverlay").style.display = "none";
 };
 
@@ -1200,9 +1219,47 @@ document.getElementById("videoCallBtn").addEventListener("click", () => {
     startVideoCall(activeReceiver);
 
     // 🔹 Show overlay and caller name
-    document.querySelector(".call-user-name").innerText = activeReceiver;
+    if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = activeReceiver;
     document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${activeReceiver}...`;
     document.getElementById("callOverlay").style.display = "block"; // show overlay
     console.log("[VideoCall] UI updated for outgoing call.");
 });
 
+
+
+// ---- Tab switching for sidebar nav icons ----
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".tab-swtich").forEach(el => {
+    el.addEventListener("click", () => {
+      const tab = el.dataset.tab;
+      if (!tab) return;
+      document.querySelectorAll(".nav-icon.tab-swtich, .mobile-nav-icon.tab-swtich").forEach(n => n.classList.remove("active"));
+      el.classList.add("active");
+      document.querySelectorAll(".tab-panel").forEach(p => { p.hidden = (p.id !== ("tab-" + tab)); });
+    });
+  });
+
+  // Dropdown positioning and toggle
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dropdown-btn");
+    if (btn) {
+      e.stopPropagation();
+      const dropdown = btn.closest(".dropdown");
+      const menu = dropdown && dropdown.querySelector(".dropdown-menu");
+      if (!menu) return;
+      const isOpen = menu.classList.contains("show");
+      document.querySelectorAll(".dropdown-menu.show").forEach(m => m.classList.remove("show"));
+      if (!isOpen) {
+        const rect = btn.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + "px";
+        menu.style.left = (rect.left - menu.offsetWidth + rect.width) + "px";
+        menu.classList.add("show");
+      }
+      return;
+    }
+    // Outside click closes all
+    if (!e.target.closest(".dropdown-menu")) {
+      document.querySelectorAll(".dropdown-menu.show").forEach(m => m.classList.remove("show"));
+    }
+  });
+});

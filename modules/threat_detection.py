@@ -1,4 +1,5 @@
 from modules.database import get_db
+import os
 
 def log_event(username, event_type, description):
     username = str(username)[:50]
@@ -7,10 +8,11 @@ def log_event(username, event_type, description):
 
     conn = get_db()
     cur = conn.cursor()
+    ph = "%s" if os.environ.get("DATABASE_URL") else "?"
 
     try:
         cur.execute(
-            "INSERT INTO logs (username, event_type, description) VALUES (?, ?, ?)",
+            f"INSERT INTO logs (username, event_type, description) VALUES ({ph}, {ph}, {ph})",
             (username, event_type, description)
         )
         conn.commit()

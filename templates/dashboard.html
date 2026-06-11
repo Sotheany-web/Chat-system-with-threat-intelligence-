@@ -1,12 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Premium Chat UI</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="assets/css/image-lightbox.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/style.css') }}">
 
     <style>
@@ -65,7 +67,7 @@
                 </div>
                                 
                 <div class="nav-icon has-badge active tab-swtich" data-tab="chats">
-                    <i class="fas fa-comment-dots"></i><span class="badge">9</span>
+                    <i class="fas fa-comment-dots"></i><span class="badge" id="unreadBadge" style="display:none;"></span>
                 </div>
                 <div class="nav-icon tab-swtich" data-tab="profile"><i class="fas fa-user"></i></div>
                 <div class="nav-icon tab-swtich" data-tab="contacts"><i class="fas fa-book"></i></div>
@@ -89,7 +91,7 @@
                         </button>
                         <div class="user-profile dropdown " id="userProfileBtn">
                             <button class="dropdown-btn" aria-haspopup="true" data-dir="right top" aria-expanded="false">
-                                <img src="assets/images/banner.jpg" alt="User" class="no-lightbox" />
+                                <div class="user-avatar-initial">{{ username[0]|upper }}</div>
                                 <div class="profile-name">
                                     {{ username }}
                                 </div>
@@ -179,7 +181,7 @@
                         </div>
                     </div>
                     <div class="my-profile-avatar">
-                        <img src="assets/images/2147943827.jpg" alt="Avatar">
+                        <div class="user-avatar-initial">{{ username[0]|upper }}</div>
                     </div>
                 </div>
                 <div class="sidebar-container">
@@ -217,8 +219,7 @@
                         <!-- A Section -->
                         <div class="letter-divider letter-a">A</div>
                         <div class="contact-item">
-                            <img src="assets/images/banner.jpg" alt="Adinda Kirana"
-                                class="avatar">
+                            <div class="user-avatar-initial">A</div>
                             <div class="contact-name">Adinda Kirana</div>
 
                             <div class="dropdown">
@@ -458,8 +459,7 @@
                 </div>
             </div>
             <div class="tab-panel" id="tab-settings" hidden>
-                <div class="sidebar-header banner" id="backgroundOverlay"
-                    style="background-image: url('assets/images/banner.jpg');">
+                <div class="sidebar-header banner" id="backgroundOverlay">
                 <div class="header-content">
                     <h1 class="settings-title">Settings</h1>
                     <button class="edit-btn">
@@ -473,7 +473,7 @@
                 </div>
                 <div class="profile-section">
                     <div class="profile-photo-container">
-                    <img src="assets/images/2147943827.jpg" alt="Profile" class="profile-photo no-lightbox" id="profileImage">
+                    <div class="user-avatar-initial" id="profileImage">{{ username[0]|upper }}</div>
                     <button class="camera-btn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -734,29 +734,6 @@
                     </div>
                 </div>
 
-                <div class="message received" data-message-id="3">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="image-message">
-                                <img src="assets/images/454.jpg"  alt="Shared image" loading="lazy">
-                            </div>
-                        </div>
-                        <div class="message-timestamp">10:33 AM</div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="message sent" data-message-id="4">
                     <div class="message-wrapper">
                         <div class="message-content">
@@ -810,41 +787,6 @@
                     </div>
                 </div>
 
-                <div class="message received group" data-message-id="3">
-                    <div class="message-wrapper">
-                        <div class="message-content">
-                            <div class="files-gallery multiple">
-                                <div class="gallery-item">
-                                    <img src="assets/images/1.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                   <img src="assets/images/2.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                   <img src="assets/images/3.jpg"  alt="Design mockup 1">
-                                </div>
-                                <div class="gallery-item">
-                                    <div class="gallery-overlay gallery-more">+5 more</div>
-                                    <img src="assets/images/4.jpg"  alt="Design mockup 1">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="message-timestamp">10:33 AM</div>
-                        <div class="message-actions">
-                            <button class="message-action-btn more-options" title="More options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            <div class="message-dropdown">
-                                <div class="dropdown-item edit">
-                                    <i class="fas fa-pencil-alt"></i> Edit
-                                </div>
-                                <div class="dropdown-item delete">
-                                    <i class="fas fa-trash"></i> Delete
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="message sent" data-message-id="4">
                     <div class="message-wrapper">
                         <div class="message-content">
@@ -1039,26 +981,7 @@
                         <a href="#" class="section-action">See All</a>
                     </div>
                     <div class="section-content">
-                        <div class="media-grid">
-                            <div class="media-item">
-                                <img src="assets/images/1.jpg" alt="Shared image" loading="lazy">
-                            </div>
-                            <div class="media-item">
-                               <img src="assets/images/2.jpg" alt="Shared image" loading="lazy">
-                            </div>
-                            <div class="media-item">
-                               <img src="assets/images/3.jpg" alt="Shared image" loading="lazy">
-                            </div>
-                            <div class="media-item">
-                                <img src="assets/images/4.jpg" alt="Shared image" loading="lazy">
-                            </div>
-                            <div class="media-item">
-                                <img src="assets/images/2147943827.jpg" alt="Shared image" loading="lazy">
-                            </div>
-                            <div class="media-item">
-                                <div class="media-placeholder">+12</div>
-                            </div>
-                        </div>
+                        <div class="media-grid"></div>
                     </div>
                 </div>
                 <div class="section">
@@ -1218,11 +1141,11 @@
             </div>
         </div>
     </div>
-    <div class="call-overlay" id="callOverlay">
-        <div class="audio-call-interface" id="audioCallInterface">
-            <div class="call-avatar">SW</div>
-            <div class="call-user-name">Sarah Wilson</div>
-            <div class="call-status" id="callStatus">Connecting...</div>
+    <div class="call-overlay" id="callOverlay" style="display:none;">
+        <div class="audio-call-interface" id="audioCallInterface" style="display:none;">
+            <div class="call-avatar" id="callAvatar">{{ username[0]|upper }}</div>
+            <div class="call-user-name" id="callUserName"></div>
+            <div class="call-status" id="callStatus">Calling...</div>
             <div class="call-duration" id="callDuration">00:00</div>
             <div class="call-controls">
                 <button class="call-control-btn mute" id="muteBtn">
@@ -1236,118 +1159,35 @@
                 </button>
             </div>
         </div>
-        <div class="video-call-interface" id="videoCallInterface">
+        <div class="video-call-interface" id="videoCallInterface" style="display:none;">
              <div class="video-wrapper">
                 <div class="video-call-container">
-                    <!-- Header -->
                     <div class="call-header">
                         <div class="call-info">
-                            <h2>Team Strategy Meeting</h2>
-                            <p>10 participants • 01:24:35</p>
-                        </div>
-            
-                        <div>
-                            <div class="call-actions">
-                                <button><i class="fas fa-user-plus"></i> Invite</button>
-                                <button class="theme-toggle" id="themeToggleVideo" title="Toggle Dark/Light Mode">
-                                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                       stroke-width="2">
-                                       <circle cx="12" cy="12" r="5"></circle>
-                                       <line x1="12" y1="1" x2="12" y2="3"></line>
-                                       <line x1="12" y1="21" x2="12" y2="23"></line>
-                                       <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                                       <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                                       <line x1="1" y1="12" x2="3" y2="12"></line>
-                                       <line x1="21" y1="12" x2="23" y2="12"></line>
-                                       <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                                       <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                                   </svg>
-                                 </button>
-                            </div>
+                            <h2 id="videoCallTitle">Calling...</h2>
+                            <p id="videoCallMeta">2 participants • 00:00:00</p>
                         </div>
                     </div>
-            
-                    <!-- Main Content -->
                     <div class="call-content">
                         <div class="main-video">
-                            <video autoplay muted playsinline></video>
+                            <video autoplay muted playsinline id="localVideoEl"></video>
                             <div class="participant-info">
                                 <div class="participant-status"></div>
-                                <span>Sarah Johnson (You)</span>
+                                <span id="localVideoLabel">You</span>
                             </div>
                         </div>
-            
                         <div class="participants-container">
                             <div class="participants-header">
                                 <h3>Participants</h3>
-                                <div class="participants-count">10 online</div>
+                                <div class="participants-count" id="videoParticipantsCount">2 online</div>
                             </div>
-            
-                            <div class="participants-grid">
-                                <!-- Participant Tiles -->
-                                <div class="participant active-speaker">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Michael Chen</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Emma Rodriguez</div>
-                                    <div class="mic-status"><i class="fas fa-microphone-slash"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">David Kim</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Priya Sharma</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">James Wilson</div>
-                                    <div class="mic-status"><i class="fas fa-microphone-slash"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Sophie Martin</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Alex Turner</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Lisa Anderson</div>
-                                    <div class="mic-status"><i class="fas fa-microphone-slash"></i></div>
-                                </div>
-            
-                                <div class="participant">
-                                    <video autoplay playsinline></video>
-                                    <div class="name">Thomas Wright</div>
-                                    <div class="mic-status"><i class="fas fa-microphone"></i></div>
-                                </div>
-                            </div>
+                            <div class="participants-grid" id="remoteVideoGrid"></div>
                         </div>
                     </div>
-            
-                    <!-- Controls -->
                     <div class="call-controls">
-                        <button class="control-btn mic-btn active" data-tooltip="Mute"><i class="fas fa-microphone"></i></button>
-                        <button class="control-btn video-btn" data-tooltip="Stop Video"><i class="fas fa-video"></i></button>
-                        <button class="control-btn screen-share-btn" data-tooltip="Share Screen"><i class="fas fa-desktop"></i></button>
-                        <button class="control-btn end-call-btn" id="videoHangupBtn" data-tooltip="End Call"><i class="fas fa-phone"></i></button>
+                        <button class="control-btn mic-btn active" id="videoMuteBtn" data-tooltip="Mute"><i class="fas fa-microphone"></i></button>
+                        <button class="control-btn video-btn" id="videoCamBtn" data-tooltip="Stop Video"><i class="fas fa-video"></i></button>
+                        <button class="control-btn end-call-btn" id="videoHangupBtn" data-tooltip="End Call"><i class="fas fa-phone-slash"></i></button>
                     </div>
                 </div>
             </div>
@@ -1389,32 +1229,16 @@
             <i class="fas fa-download"></i>
         </div>
     </div>
-    <script src="assets/js/smart-dropdown.js"></script>
-    <script src="assets/js/accordion.js"></script>
-    <script src="assets/js/image-lightbox.js"></script>
-    <script src="assets/js/script.js"></script>
 
     <div id="profilePopup" class="profile-popup">
         <div class="popup-content">
-            <img src="{{ url_for('static', filename='assets/images/banner.jpg') }}" class="popup-avatar">
+            <div class="user-avatar-initial popup-avatar">{{ username[0]|upper }}</div>
             <div class="popup-info">
                 <strong>{{ username }}</strong>
             </div>
         </div>
     </div>
 
-    <script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    document.querySelectorAll('.user-item').forEach(item => {
-        item.addEventListener('click', function () {
-            const user = this.getAttribute('data-user');
-            window.location.href = '/dashboard?chat_user=' + user;
-        });
-    });
-
-});
-</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -1445,9 +1269,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const chatUser = "{{ chat_user }}";
   const loggedInUser = "{{ username }}";
 </script>
-
-<!-- Load Socket.IO client (served automatically when you run with socketio.run(app)) -->
-<script src="/socket.io/socket.io.js"></script>
 
 <!-- Load your crypto logic -->
 <script src="{{ url_for('static', filename='assets/js/crypto.js') }}"></script>

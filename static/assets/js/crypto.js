@@ -3,11 +3,6 @@ console.log("crypto.js loaded");
 
 let aesKey = null;
 
-/**
- * Fetch a per-conversation AES-128 key from the server.
- * Both participants derive the same key (server sorts usernames before hashing),
- * so messages encrypted by either side can be decrypted by the other.
- */
 async function generateAESKey(otherUser) {
     try {
         if (!window.crypto || !window.crypto.subtle) {

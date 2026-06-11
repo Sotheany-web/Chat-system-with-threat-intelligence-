@@ -21,8 +21,20 @@ from supabase import create_client, Client
 import os
 
 
+import secrets as _secrets
+
 app = Flask(__name__)
-app.secret_key = "secret123"
+_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+if os.environ.get("SECRET_KEY"):
+    app.secret_key = os.environ.get("SECRET_KEY")
+elif os.path.exists(_key_file):
+    with open(_key_file) as _f:
+        app.secret_key = _f.read().strip()
+else:
+    _new_key = _secrets.token_hex(24)
+    with open(_key_file, 'w') as _f:
+        _f.write(_new_key)
+    app.secret_key = _new_key
 
 # Use Postgres if DATABASE_URL is set, otherwise fallback to SQLite
 db_url = os.environ.get("DATABASE_URL")
@@ -37,6 +49,8 @@ db = SQLAlchemy(app)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # ensure local folder exists
+
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mp3', '.wav', '.pdf'}
 
 # Supabase client (only used if USE_SUPABASE=true)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -175,6 +189,7 @@ def websocket(ws):
                     continue
 
                 payload = json.dumps({
+                    "type": "text",
                     "sender": username,
                     "receiver": receiver,
                     "ciphertext": ciphertext,
@@ -303,6 +318,9 @@ def messages(chat_user):
         resp.headers["Location"] = url_for('login')
         return resp
 
+    if chat_user == session['user']:
+        return jsonify({"error": "Forbidden"}), 403
+
     history = get_chat_history(session['user'], chat_user)
     formatted = []
     for row in history:
@@ -358,10 +376,20 @@ class Message(db.Model):
 user_keys = {}
 
 def generate_rsa_keypair(username):
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key = private_key.public_key()
-    user_keys[username] = private_key
-    return public_key
+    if username not in user_keys:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        user_keys[username] = private_key
+    return user_keys[username].public_key()
+
+@app.route("/conversation_key/<other_user>")
+def conversation_key(other_user):
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    import hashlib
+    pair = sorted([session['user'], other_user])
+    raw = app.secret_key + pair[0] + pair[1]
+    key = hashlib.sha256(raw.encode()).hexdigest()[:32]
+    return jsonify({"key": key})
 
 @app.route("/public_key/<username>")
 def get_public_key(username):
@@ -375,21 +403,23 @@ def get_public_key(username):
 # ---------------- UPLOAD ROUTES ----------------
 @app.route("/send", methods=["POST"])
 def send_message():
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
     try:
         data = request.get_json(force=True)
 
-        # Validate required fields
-        required = ["sender", "receiver", "ciphertext", "nonce"]
-        for field in required:
+        # Validate required fields — sender is taken from session, not client
+        for field in ("receiver", "ciphertext", "nonce"):
             if field not in data or not data[field]:
                 return jsonify({"error": f"Missing field: {field}"}), 400
 
         msg = Message(
-            sender=data["sender"],
+            sender=session['user'],
             receiver=data["receiver"],
             ciphertext=data["ciphertext"],
             nonce=data["nonce"],
-            timestamp=datetime.utcnow()  # ensure timestamp is set
+            timestamp=datetime.utcnow()
         )
         db.session.add(msg)
         db.session.commit()
@@ -427,7 +457,9 @@ def upload_file():
             return jsonify({"error": "Missing file"}), 400
 
         filename = secure_filename(file.filename)
-        ext = os.path.splitext(filename)[1] or ".dat"
+        ext = os.path.splitext(filename)[1].lower() or ".dat"
+        if ext not in ALLOWED_EXTENSIONS:
+            return jsonify({"error": "Unsupported file type"}), 400
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
@@ -460,7 +492,10 @@ def upload_file():
             "timestamp": datetime.utcnow().isoformat()
         })
         if receiver in connections:
-            connections[receiver].send(payload)
+            try:
+                connections[receiver].send(payload)
+            except Exception as e:
+                print(f"[DEBUG] Failed to forward file message to {receiver}: {e}")
 
         return jsonify({"status": "success", "url": url}), 201
 
@@ -492,7 +527,9 @@ def upload_image():
             return jsonify({"error": "Missing receiver"}), 400
         
         filename = secure_filename(image.filename)
-        ext = os.path.splitext(filename)[1] or ".jpg"
+        ext = os.path.splitext(filename)[1].lower() or ".jpg"
+        if ext not in ALLOWED_EXTENSIONS:
+            return jsonify({"error": "Unsupported file type"}), 400
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
@@ -544,7 +581,9 @@ def upload_audio():
             print("[DEBUG] No audio in request.files")
             return jsonify({"error": "Missing audio"}), 400
         
-        ext = os.path.splitext(secure_filename(audio.filename))[1] or ".webm"
+        ext = os.path.splitext(secure_filename(audio.filename))[1].lower() or ".webm"
+        if ext not in ALLOWED_EXTENSIONS:
+            return jsonify({"error": "Unsupported file type"}), 400
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
@@ -578,7 +617,10 @@ def upload_audio():
             "timestamp": datetime.utcnow().isoformat()
         })
         if receiver in connections:
-            connections[receiver].send(payload)
+            try:
+                connections[receiver].send(payload)
+            except Exception as e:
+                print(f"[DEBUG] Failed to forward audio message to {receiver}: {e}")
 
         return jsonify({"status": "success", "url": url}), 201
 
@@ -590,18 +632,26 @@ def upload_audio():
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    msg = Message.query.filter_by(file_name=filename).first()
+    if not msg or session['user'] not in (msg.sender, msg.receiver):
+        return jsonify({"error": "Forbidden"}), 403
+
     if os.environ.get("USE_SUPABASE") == "true":
-        # In Supabase mode, files are not served locally.
-        # Just redirect to the Supabase public URL.
         url = supabase.storage.from_("uploads").get_public_url(filename)
         return redirect(url)
     else:
-        # Local mode: serve from UPLOAD_FOLDER
-        return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False)
+        resp = send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False)
+        resp.headers['Content-Security-Policy'] = "default-src 'none'"
+        return resp
 
 # Temporary debug route
 @app.route("/debug-messages")
 def debug_messages():
+    if not app.debug:
+        return jsonify({"error": "Not found"}), 404
     conn = get_db()
     cur = conn.cursor()
     # Select all columns from the messages table

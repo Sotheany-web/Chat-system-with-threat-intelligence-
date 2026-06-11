@@ -3,7 +3,7 @@ from datetime import datetime
 import psycopg2
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", "..", ".."))  # go up 3 levels
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))  # go up 1 level to project root
 INSTANCE_DIR = os.path.join(PROJECT_ROOT, "instance")
 DB_PATH = os.path.join(INSTANCE_DIR, "database.db")
 

@@ -5,6 +5,47 @@ Url                  : https://www.templaterise.com/template/msgnest-free-modern
 */
 
 
+* {
+  font-family: 'Inter', sans-serif;
+}
+
+.message.call-log {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.call-log-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #666;
+}
+
+.call-log-time {
+  font-size: 11px;
+  color: #999;
+}
+
+.user-avatar-initial {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary, #1877f2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
 :root {
   --primary: #1877f2;
   --bg-primary: #ffffff;
@@ -3034,6 +3075,7 @@ body {
 
 .dropdown-menu.show {
   display: block;
+  visibility: visible;
 }
 
 .dropdown-menu a {
