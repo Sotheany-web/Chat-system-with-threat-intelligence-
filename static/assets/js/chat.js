@@ -89,13 +89,13 @@ socket.onmessage = async (event) => {
       const _imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
       const _who = msg.sender === loggedInUser ? "Me" : msg.sender;
       if (msg.type === "image") {
-        addMessageToUI(_who, '<img src="' + msg.url + '" style="max-width:200px; border-radius:8px;">', null);
+        addMessageToUI(_who, makeMediaNode('img', msg.url), null);
       } else {
         const _ext = (msg.url || "").split(".").pop().split("?")[0].toLowerCase();
         if (_imgExts.includes(_ext)) {
-          addMessageToUI(_who, '<img src="' + msg.url + '" style="max-width:200px; border-radius:8px;">', null);
+          addMessageToUI(_who, makeMediaNode('img', msg.url), null);
         } else {
-          addMessageToUI(_who, '<a href="' + msg.url + '" target="_blank">Download file</a>', null);
+          addMessageToUI(_who, makeMediaNode('file', msg.url), null);
         }
       }
       return;
@@ -425,19 +425,19 @@ async function loadChatHistory(user) {
         const imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
         const ext = (msg.file_name || "").split(".").pop().toLowerCase();
         if (imgExts.includes(ext)) {
-          addMessageToUI(who, '<img src="/uploads/' + msg.file_name + '" style="max-width:200px; border-radius:8px;">', msg.timestamp);
+          addMessageToUI(who, makeMediaNode('img', '/uploads/' + msg.file_name), msg.timestamp);
           lastPreview = "Photo";
         } else {
-          addMessageToUI(who, '<a href="/uploads/' + msg.file_name + '" target="_blank">Download file</a>', msg.timestamp);
+          addMessageToUI(who, makeMediaNode('file', '/uploads/' + msg.file_name), msg.timestamp);
           lastPreview = "File";
         }
 
       } else if (msg.msg_type === "image") {
-        addMessageToUI(who, '<img src="/uploads/' + msg.file_name + '" style="max-width:200px; border-radius:8px;">', msg.timestamp);
+        addMessageToUI(who, makeMediaNode('img', '/uploads/' + msg.file_name), msg.timestamp);
         lastPreview = "Photo";
 
       } else if (msg.msg_type === "audio") {
-        addMessageToUI(who, '<audio controls src="/uploads/' + msg.file_name + '"></audio>', msg.timestamp);
+        addMessageToUI(who, makeMediaNode('audio', '/uploads/' + msg.file_name), msg.timestamp);
         lastPreview = "Voice message";
 
       } else if (msg.msg_type === "call") {
@@ -504,17 +504,69 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function safeMediaUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('/uploads/')) return url;
+  try {
+    const p = new URL(url, window.location.origin);
+    if (p.protocol === 'https:' || p.protocol === 'http:') return url;
+  } catch (_) {}
+  return null;
+}
+
+function makeMediaNode(type, url, filename) {
+  const safe = safeMediaUrl(url);
+  if (type === 'img') {
+    const img = document.createElement('img');
+    img.src = safe || '';
+    img.style.maxWidth = '200px';
+    img.style.borderRadius = '8px';
+    return img;
+  }
+  if (type === 'audio') {
+    const aud = document.createElement('audio');
+    aud.controls = true;
+    aud.src = safe || '';
+    return aud;
+  }
+  // file link
+  const a = document.createElement('a');
+  a.href = safe || '#';
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = filename || 'Download file';
+  return a;
+}
+
 function addMessageToUI(sender, content, timestamp=null) {
   const chatBox = document.getElementById("chatMessages");
   const messageDiv = document.createElement("div");
   messageDiv.className = sender === "Me" ? "message sent" : "message received";
-  messageDiv.innerHTML = `
-      <div class="message-wrapper">
-          <div class="message-content">
-              <div class="message-text">${content}</div>
-          </div>
-          <div class="message-timestamp">${formatTimestamp(timestamp)}</div>
-      </div>`;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "message-wrapper";
+
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "message-content";
+
+  const textDiv = document.createElement("div");
+  textDiv.className = "message-text";
+
+  if (content instanceof Node) {
+    textDiv.appendChild(content);
+  } else {
+    textDiv.textContent = String(content);
+  }
+
+  contentDiv.appendChild(textDiv);
+
+  const tsDiv = document.createElement("div");
+  tsDiv.className = "message-timestamp";
+  tsDiv.textContent = formatTimestamp(timestamp);
+
+  wrapper.appendChild(contentDiv);
+  wrapper.appendChild(tsDiv);
+  messageDiv.appendChild(wrapper);
   chatBox.appendChild(messageDiv);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
@@ -755,14 +807,8 @@ function sendFile(file) {
                 const data = JSON.parse(text);
                 console.log("[DEBUG] Parsed JSON:", data);
 
-                if (data.url.endsWith(".pdf")) {
-                  // PDF → open in new tab and render inline
-                  addMessageToUI("Me", `<a href="${data.url}" target="_blank">Open PDF</a>`, new Date().toISOString());
-                } else {
-                  // Other files → download
-                  addMessageToUI("Me", `<a href="${data.url}" target="_blank">Download file</a>`, new Date().toISOString());
-                }
-
+                const _fileNode = makeMediaNode('file', data.url, data.url.endsWith('.pdf') ? 'Open PDF' : 'Download file');
+                addMessageToUI("Me", _fileNode, new Date().toISOString());
                 // Send to receiver via WebSocket
                 socket.send(JSON.stringify({
                     type: "file",
@@ -804,7 +850,7 @@ function sendImage(image) {
                 console.log("[DEBUG] Parsed JSON:", data);
 
                 // Render immediately for sender (aligned right)
-                addMessageToUI("Me", `<img src="${data.url}" style="max-width:200px;">`, new Date().toISOString());
+                addMessageToUI("Me", makeMediaNode('img', data.url), new Date().toISOString());
 
                 socket.send(JSON.stringify({
                     type: "image",
@@ -889,7 +935,7 @@ function sendAudio(audioBlob) {
                 console.log("[DEBUG] Parsed JSON:", data);
 
                 // Render immediately for sender (aligned right)
-                addMessageToUI("Me", `<audio controls src="${data.url}"></audio>`, new Date().toISOString());
+                addMessageToUI("Me", makeMediaNode('audio', data.url), new Date().toISOString());
 
                 // Send to receiver via WebSocket
                 socket.send(JSON.stringify({
