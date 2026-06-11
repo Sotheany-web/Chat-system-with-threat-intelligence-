@@ -1259,7 +1259,7 @@ body {
 
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
 }
 
@@ -1288,6 +1288,29 @@ body {
 .media-placeholder {
   color: var(--text-secondary);
   font-size: 24px;
+}
+
+/* For tablets and smaller laptops */
+@media (max-width: 1024px) {
+  .media-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* For mobile phones */
+@media (max-width: 600px) {
+  .media-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .media-item {
+    border-radius: 6px;
+  }
+
+  .media-placeholder {
+    font-size: 18px;
+  }
 }
 
 /* .file-list {
