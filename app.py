@@ -268,10 +268,11 @@ def websocket(ws):
                     "sender": username,
                     "receiver": receiver,
                     "type": msg["type"],
-                    "sdp": msg.get("sdp"),              # for offer/answer
-                    "candidate": msg.get("candidate"),  # for ICE
-                    "status": msg.get("status"),        # for call-end/missed
-                    "duration": msg.get("duration"),    # optional duration
+                    "callType": msg.get("callType"),    # audio or video — must be forwarded
+                    "sdp": msg.get("sdp"),
+                    "candidate": msg.get("candidate"),
+                    "status": msg.get("status"),
+                    "duration": msg.get("duration"),
                     "timestamp": datetime.now().isoformat()
                 })
 

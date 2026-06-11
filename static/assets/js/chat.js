@@ -112,15 +112,22 @@ socket.onmessage = async (event) => {
 
     // Text message + decryption
     if (msg.type === "text") {
-      const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+      const chatPartner = msg.sender === loggedInUser ? msg.receiver : msg.sender;
+      // Ensure we have a key for this conversation (may arrive before user opens chat)
+      if (!_aesKeyMap[chatPartner]) {
+        try { await generateAESKey(chatPartner); } catch (_) {}
+      }
       let plaintext;
       try {
-        plaintext = await decryptMessage(msg.ciphertext, msg.nonce);
+        plaintext = await decryptMessage(msg.ciphertext, msg.nonce, chatPartner);
       } catch (err) {
         console.error("[DEBUG] Failed to decrypt text message:", err, msg);
         plaintext = "[Decryption failed]";
       }
-      addMessageToUI(msg.sender === loggedInUser ? "Me" : msg.sender, plaintext, msg.timestamp);
+      // Only render in chat if this is the active conversation
+      if (chatPartner === activeReceiver) {
+        addMessageToUI(msg.sender === loggedInUser ? "Me" : msg.sender, plaintext, msg.timestamp);
+      }
       return;
     }
 
@@ -219,129 +226,90 @@ socket.onmessage = async (event) => {
 
       // Accept button for incoming call - this is where we set up the call after user clicks "Accept"
       document.getElementById("acceptCallBtn").onclick = async () => {
-        document.getElementById("incomingCallInterface").style.display = "none"; 
+        try {
+          document.getElementById("incomingCallInterface").style.display = "none";
 
-          // Add local mic/cam
-          const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:true });
+          // Request only the media needed for the call type
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: msg.callType === "video"
+          });
 
-          // Check call type from the offer
           if (msg.callType === "video") {
-            console.log("[Receiver] Accepting video call.");
-            // Show video interface
             document.getElementById("videoCallInterface").style.display = "block";
 
-            // Attach local preview
-            const localVideoEl = document.querySelector("#videoCallInterface .main-video video");
+            const localVideoEl = document.getElementById("localVideoEl");
             if (localVideoEl) {
               localVideoEl.srcObject = stream;
               localVideoEl.autoplay = true;
               localVideoEl.playsInline = true;
-              console.log("[Receiver] Local video preview attached.");
             }
 
-            // Add local tracks
-            stream.getTracks().forEach(track => {
-              videoPc.addTrack(track, stream);
-              console.log("[Receiver] Added local track:", track.kind);
-            });
+            stream.getTracks().forEach(track => videoPc.addTrack(track, stream));
 
-            // Apply remote description
             await videoPc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
-            console.log("[Receiver] Applied remote description (offer).");
 
-            // Flush queued candidates
             for (const candidate of pendingCandidates) {
-              try {
-                await videoPc.addIceCandidate(new RTCIceCandidate(candidate));
-                console.log("[Receiver] Added queued ICE candidate:", candidate);
-              } catch (err) {
-                console.error("Error adding queued ICE candidate:", err);
-              }
+              try { await videoPc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
             }
             pendingCandidates = [];
 
-            // Create and send answer
             const answer = await videoPc.createAnswer();
             await videoPc.setLocalDescription(answer);
-            socket.send(JSON.stringify({
-              type: "call-answer",
-              callType: "video",
-              sender: loggedInUser,
-              receiver: msg.sender,
-              sdp: answer
-            }));
-            console.log("[Receiver] Sent video call-answer to caller.");
+            socket.send(JSON.stringify({ type: "call-answer", callType: "video", sender: loggedInUser, receiver: msg.sender, sdp: answer }));
 
-            // 🔹 Update UI names/status
-            if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
             document.getElementById("videoCallTitle").textContent = "Connected";
+            if (document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
 
-            // Handle remote video
-            videoPc.ontrack = event => {
-              const remoteVideoEl = document.createElement("video");
-              remoteVideoEl.srcObject = event.streams[0];
-              remoteVideoEl.autoplay = true;
-              remoteVideoEl.playsInline = true;
-              addRemoteVideoTile(event.streams[0], msg.sender || "");
-            };
+            videoPc.ontrack = event => addRemoteVideoTile(event.streams[0], msg.sender || "");
 
-            // Hangup cleanup
-            document.getElementById("hangupBtn").onclick = () => {
-              stream.getTracks().forEach(track => track.stop());
+            document.getElementById("videoHangupBtn").onclick = () => {
+              stream.getTracks().forEach(t => t.stop());
               videoPc.close();
               clearVideoCall();
+              document.getElementById("videoCallInterface").style.display = "none";
               document.getElementById("callOverlay").style.display = "none";
             };
 
           } else {
-            // Show audio interface
-            console.log("[Receiver] Accepting audio call.");
             document.getElementById("audioCallInterface").style.display = "block";
 
-            // Add local tracks
-            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+            // Only add audio tracks for audio call
+            stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
 
-            // Apply remote description
             await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
-            // Flush queued candidates
             for (const candidate of pendingCandidates) {
-              try {
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-              } catch (err) {
-                console.error("Error adding queued ICE candidate:", err);
-              }
+              try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
             }
             pendingCandidates = [];
 
-            // Create and send answer
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            socket.send(JSON.stringify({
-              type: "call-answer",
-              callType: "audio",
-              sender: loggedInUser,
-              receiver: msg.sender,
-              sdp: answer
-            }));
-            console.log("[Receiver] Sent audio call-answer to caller.");
+            socket.send(JSON.stringify({ type: "call-answer", callType: "audio", sender: loggedInUser, receiver: msg.sender, sdp: answer }));
 
-            // 🔹 Start call timer
             callStartTime = Date.now();
             durationInterval = setInterval(updateCallDuration, 1000);
+            if (document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
+            document.getElementById("callStatus").textContent = "Connected";
 
-            // 🔹 Update UI names/status
-            if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = msg.sender;
-            document.getElementById("callStatus").innerText = "Connected";
-
-            // Hangup cleanup
             document.getElementById("hangupBtn").onclick = () => {
               clearInterval(durationInterval);
-              stream.getTracks().forEach(track => track.stop());
-              pc.close();
+              stream.getTracks().forEach(t => t.stop());
+              if (pc) { pc.close(); pc = null; }
+              document.getElementById("audioCallInterface").style.display = "none";
               document.getElementById("callOverlay").style.display = "none";
             };
           }
+
+        } catch (err) {
+          console.error("[Accept] Failed to accept call:", err);
+          // Restore incoming call UI so user can retry or dismiss
+          document.getElementById("incomingCallInterface").style.display = "block";
+          document.getElementById("callStatus") && (document.getElementById("callStatus").textContent = "Failed to connect");
+          const errHint = document.getElementById("incomingCallPrompt");
+          if (errHint) errHint.textContent = err.name === "NotAllowedError" ? "Microphone permission denied" : "Could not start call: " + err.message;
+        }
         };
 
       // Decline button
@@ -1197,12 +1165,7 @@ socket.addEventListener("message", async (event) => {
 // Video signaling listener
 socket.addEventListener("message", async (event) => {
   const msg = JSON.parse(event.data);
-  console.log("[Socket] Message received:", msg);
-
-  if (msg.callType !== "video") {
-    console.log("[Socket] Ignored non-video message.");
-    return;
-  }
+  if (msg.callType !== "video") return;
 
   if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
     console.log("[Socket] Received video call-answer from:", msg.sender);
@@ -1261,14 +1224,8 @@ document.getElementById("videoHangupBtn").onclick = () => {
 
 //video call button
 document.getElementById("videoCallBtn").addEventListener("click", () => {
-    console.log("Video call button clicked");
+    if (!activeReceiver) return;
     startVideoCall(activeReceiver);
-
-    // 🔹 Show overlay and caller name
-    if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = activeReceiver;
-    document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${activeReceiver}...`;
-    document.getElementById("callOverlay").style.display = "block"; // show overlay
-    console.log("[VideoCall] UI updated for outgoing call.");
 });
 
 
