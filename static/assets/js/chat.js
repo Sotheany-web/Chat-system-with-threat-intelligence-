@@ -986,7 +986,8 @@ async function startVideoCall(receiver) {
     }));
 
     // Update UI
-    document.querySelector("videoCallInterface .call-header h2").textContent = `Calling ${receiver}...`;
+    document.querySelector(".call-user-name").innerText = receiver;
+    document.getElementById("callStatus").textContent = "Calling...";
     document.getElementById("callOverlay").style.display = "block";
 
     // Listen for answer and ICE candidates
@@ -1055,5 +1056,4 @@ document.getElementById("videoCallBtn").addEventListener("click", () => {
     document.querySelector("#videoCallInterface .call-header h2").textContent = `Calling ${activeReceiver}...`;
     document.getElementById("callOverlay").style.display = "block"; // show overlay
 });
-
 
