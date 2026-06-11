@@ -42,6 +42,49 @@
     height: 36px;
     width: auto;
     }
+    /* ── Friend-request / People panel ──────────────────────────── */
+    .request-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .req-avatar, .search-result-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    .req-avatar          { background: #2860b0; }
+    .search-result-avatar{ background: #27ae60; }
+    .search-result-item  { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0; }
+    .btn-accept { padding:5px 10px;background:#2860b0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px; }
+    .btn-reject { padding:5px 10px;background:#f0f0f0;color:#666;border:none;border-radius:6px;cursor:pointer;font-size:12px; }
+    .btn-add    { padding:6px 12px;background:#2860b0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600; }
+    .btn-add:disabled { background:#95a5a6;cursor:not-allowed; }
+    .nav-pending-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background: #e74c3c;
+        color: #fff;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        pointer-events: none;
+    }
     </style>
     
 </head>
@@ -59,7 +102,7 @@
                     <i class="fas fa-comment-dots"></i>
                 </div>
                 <div class="nav-icon tab-swtich" data-tab="profile"><i class="fas fa-user"></i></div>
-                <div class="nav-icon tab-swtich" data-tab="contacts"><i class="fas fa-book"></i></div>
+                <div class="nav-icon tab-swtich" data-tab="contacts" style="position:relative;"><i class="fas fa-book"></i></div>
                 <div class="nav-icon tab-swtich" data-tab="favorites"><i class="fas fa-star"></i></div>
                 <div class="nav-icon tab-swtich" data-tab="settings"><i class="fas fa-cog"></i></div>
                 <div class="mt-auto">
@@ -108,12 +151,13 @@
                     </div>
                 </div>
                 <div class="sidebar-container">
+                    {% if users %}
                     <div class="users-list">
                         {% for u in users %}
                             {% if u[0] != username %}
 
                             <div class="user-item" data-user="{{ u[0] }}">
-                                
+
                                 <div class="user-avatar online">
                                     {{ u[0][0] | upper }}
                                 </div>
@@ -132,6 +176,13 @@
                             {% endif %}
                         {% endfor %}
                     </div>
+                    {% else %}
+                    <div style="text-align:center;padding:60px 20px;">
+                        <i class="fas fa-comment-slash" style="font-size:40px;color:#ccc;display:block;margin-bottom:14px;"></i>
+                        <p style="font-size:14px;font-weight:600;color:#999;margin:0 0 6px;">No conversations yet</p>
+                        <p style="font-size:12px;color:#bbb;margin:0;">Go to <b>Contacts</b> tab to find<br>people and start chatting</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -176,23 +227,57 @@
 
             <div class="tab-panel" id="tab-contacts" hidden>
                 <div class="sidebar-header">
-                    <h1 class="sidebar-title">Contacts</h1>
-                    <div class="search-container">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" class="search-input" placeholder="Search contacts...">
-                    </div>
+                    <h1 class="sidebar-title">People</h1>
                 </div>
                 <div class="sidebar-container">
-                    <div class="contact-list">
-                        {% for u in users %}
+
+                    <!-- ── Find People ── -->
+                    <div style="padding:12px 12px 8px;">
+                        <div class="search-container" style="margin-bottom:10px;">
+                            <i class="fas fa-search search-icon"></i>
+                            <input type="text" class="search-input" id="peopleSearchInput" placeholder="Find people by username...">
+                        </div>
+                        <button id="peopleSearchBtn" style="width:100%;padding:9px;border-radius:8px;background:#2860b0;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:600;">
+                            <i class="fas fa-user-plus"></i>&nbsp;Find People
+                        </button>
+                    </div>
+
+                    <!-- ── Search Results ── -->
+                    <div id="peopleSearchResults" style="display:none;padding:0 12px 4px;">
+                        <div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Results</div>
+                        <div id="searchResultsList"></div>
+                    </div>
+
+                    <!-- ── Pending Requests ── -->
+                    <div id="pendingRequestsSection" style="display:none;padding:0 12px 4px;">
+                        <div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">
+                            Pending Requests &nbsp;<span id="pendingBadge" style="background:#e74c3c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;">0</span>
+                        </div>
+                        <div id="pendingRequestsList"></div>
+                    </div>
+
+                    <!-- ── My Connections ── -->
+                    <div style="padding:0 12px 12px;">
+                        <div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;margin-top:12px;">My Connections</div>
+                        {% if users %}
+                        <div class="contact-list">
+                            {% for u in users %}
                             {% if u[0] != username %}
-                            <div class="contact-item" style="cursor:pointer;" onclick="loadChatHistory(&#39;{{ u[0] }}&#39;)">
+                            <div class="contact-item" style="cursor:pointer;" data-user="{{ u[0] }}" onclick="loadChatHistory(this.dataset.user)">
                                 <div class="avatar-initials avatar-green">{{ u[0][:2] | upper }}</div>
                                 <div class="contact-name">{{ u[0] }}</div>
                             </div>
                             {% endif %}
-                        {% endfor %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div style="text-align:center;padding:24px 0;color:#bbb;">
+                            <i class="fas fa-user-friends" style="font-size:30px;display:block;margin-bottom:8px;"></i>
+                            <span style="font-size:13px;">No connections yet.<br>Search for people above!</span>
+                        </div>
+                        {% endif %}
                     </div>
+
                 </div>
             </div>
             <div class="tab-panel" id="tab-favorites" hidden>
@@ -493,7 +578,7 @@
                 <i class="fas fa-comment-dots"></i>
                 <span>Chats</span>
             </div>
-            <div class="mobile-nav-icon tab-swtich" data-tab="contacts">
+            <div class="mobile-nav-icon tab-swtich" data-tab="contacts" style="position:relative;">
                 <i class="fas fa-book"></i>
                 <span>Contacts</span>
             </div>
@@ -916,6 +1001,7 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
   const chatUser = "{{ chat_user }}";
   const loggedInUser = "{{ username }}";
+  const initialPendingCount = {{ pending_count }};
 </script>
 
 <!-- Load your crypto logic -->
@@ -923,6 +1009,180 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <!-- Load your chat logic (handles send button, receive messages, etc.) -->
 <script src="{{ url_for('static', filename='assets/js/chat.js') }}"></script>
+
+<!-- ── Friend Request System ───────────────────────────────────────────────── -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Set nav badge immediately from server-rendered count
+    if (initialPendingCount > 0) updateNavBadge(initialPendingCount);
+
+    // Refresh pending list once on load
+    loadPendingRequests();
+
+    // Also refresh when the Contacts tab is opened
+    document.querySelectorAll('[data-tab="contacts"]').forEach(function (el) {
+        el.addEventListener('click', function () { loadPendingRequests(); });
+    });
+
+    // Search button + Enter key
+    var searchBtn   = document.getElementById('peopleSearchBtn');
+    var searchInput = document.getElementById('peopleSearchInput');
+    if (searchBtn)   searchBtn.addEventListener('click', searchPeople);
+    if (searchInput) searchInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') searchPeople();
+    });
+});
+
+// Event delegation for dynamically-rendered buttons
+document.addEventListener('click', function (e) {
+    var sendBtn   = e.target.closest('[data-send-request]');
+    if (sendBtn)   { sendRequest(sendBtn.dataset.sendRequest, sendBtn);   return; }
+
+    var acceptBtn = e.target.closest('[data-accept-request]');
+    if (acceptBtn) { acceptRequest(acceptBtn.dataset.acceptRequest);       return; }
+
+    var rejectBtn = e.target.closest('[data-reject-request]');
+    if (rejectBtn) { rejectRequest(rejectBtn.dataset.rejectRequest);       return; }
+});
+
+// ── Load pending requests ─────────────────────────────────────────────────────
+async function loadPendingRequests() {
+    try {
+        var res = await fetch('/api/pending_requests');
+        if (!res.ok) return;
+        var data = await res.json();
+
+        var section = document.getElementById('pendingRequestsSection');
+        var list    = document.getElementById('pendingRequestsList');
+        var badge   = document.getElementById('pendingBadge');
+        if (!section || !list || !badge) return;
+
+        if (data.length > 0) {
+            badge.textContent   = data.length;
+            section.style.display = 'block';
+            list.innerHTML = data.map(function (r) {
+                var s = escFr(r.sender);
+                return '<div class="request-item" id="req-' + s + '">'
+                    + '<div class="req-avatar">' + escFr(r.sender[0].toUpperCase()) + '</div>'
+                    + '<div style="flex:1;">'
+                    +   '<div style="font-weight:600;font-size:14px;">' + s + '</div>'
+                    +   '<div style="font-size:11px;color:#888;">Wants to connect</div>'
+                    + '</div>'
+                    + '<div style="display:flex;gap:6px;">'
+                    +   '<button class="btn-accept" data-accept-request="' + s + '" title="Accept"><i class="fas fa-check"></i></button>'
+                    +   '<button class="btn-reject" data-reject-request="' + s + '" title="Decline"><i class="fas fa-times"></i></button>'
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+            updateNavBadge(data.length);
+        } else {
+            section.style.display = 'none';
+            updateNavBadge(0);
+        }
+    } catch (err) {
+        console.error('[DEBUG] loadPendingRequests:', err);
+    }
+}
+
+// ── Update red badge on nav icons ─────────────────────────────────────────────
+function updateNavBadge(count) {
+    document.querySelectorAll('[data-tab="contacts"]').forEach(function (el) {
+        var badge = el.querySelector('.nav-pending-badge');
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'nav-pending-badge';
+                el.appendChild(badge);
+            }
+            badge.textContent   = count > 9 ? '9+' : count;
+            badge.style.display = 'flex';
+        } else if (badge) {
+            badge.style.display = 'none';
+        }
+    });
+}
+
+// ── Search for new people ─────────────────────────────────────────────────────
+async function searchPeople() {
+    var input = document.getElementById('peopleSearchInput');
+    var q     = input ? input.value.trim() : '';
+    if (!q) return;
+
+    var section = document.getElementById('peopleSearchResults');
+    var list    = document.getElementById('searchResultsList');
+    if (!section || !list) return;
+
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:#888;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> Searching…</div>';
+    section.style.display = 'block';
+
+    try {
+        var res  = await fetch('/api/search_users?q=' + encodeURIComponent(q));
+        var data = await res.json();
+
+        if (!data.length) {
+            list.innerHTML = '<div style="text-align:center;padding:12px;color:#888;font-size:13px;">No users found</div>';
+        } else {
+            list.innerHTML = data.map(function (u) {
+                var eu = escFr(u);
+                return '<div class="search-result-item">'
+                    + '<div class="search-result-avatar">' + escFr(u[0].toUpperCase()) + '</div>'
+                    + '<div style="flex:1;font-weight:600;font-size:14px;">' + eu + '</div>'
+                    + '<button class="btn-add" data-send-request="' + eu + '" id="add-btn-' + eu + '">'
+                    +   '<i class="fas fa-user-plus"></i> Add'
+                    + '</button>'
+                    + '</div>';
+            }).join('');
+        }
+    } catch (err) {
+        list.innerHTML = '<div style="text-align:center;padding:12px;color:#e74c3c;font-size:13px;">Search failed — try again.</div>';
+        console.error('[DEBUG] searchPeople:', err);
+    }
+}
+
+// ── Send a connection request ─────────────────────────────────────────────────
+async function sendRequest(username, btn) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-clock"></i> Sent'; }
+    try {
+        var res = await fetch('/api/send_request/' + encodeURIComponent(username), { method: 'POST' });
+        if (!res.ok && btn) btn.innerHTML = '<i class="fas fa-ban"></i> Already sent';
+    } catch (err) {
+        console.error('[DEBUG] sendRequest:', err);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus"></i> Add'; }
+    }
+}
+
+// ── Accept a pending request ──────────────────────────────────────────────────
+async function acceptRequest(sender) {
+    try {
+        await fetch('/api/accept_request/' + encodeURIComponent(sender), { method: 'POST' });
+        window.location.reload(); // refresh sidebar friend list
+    } catch (err) {
+        console.error('[DEBUG] acceptRequest:', err);
+    }
+}
+
+// ── Reject / decline a request ────────────────────────────────────────────────
+async function rejectRequest(sender) {
+    try {
+        await fetch('/api/reject_request/' + encodeURIComponent(sender), { method: 'POST' });
+        var item = document.getElementById('req-' + sender);
+        if (item) item.remove();
+        await loadPendingRequests();
+    } catch (err) {
+        console.error('[DEBUG] rejectRequest:', err);
+    }
+}
+
+// ── HTML-escape helper (safe for both text and attribute values) ──────────────
+function escFr(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+}
+</script>
 
 </body>
 
