@@ -79,6 +79,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 let pendingCandidates = [];
 let pendingOffer = null;
+let pendingAudioCandidates = [];
+let pendingVideoCandidates = [];
 
 // decrypt message before displaying (receiver side)
 socket.onmessage = async (event) => {
@@ -136,7 +138,7 @@ socket.onmessage = async (event) => {
       console.log("[Receiver] Incoming call-offer:", msg);
 
       // 🔹 Show incoming call UI here
-      document.getElementById("callOverlay").style.display = "block";
+      document.getElementById("callOverlay").style.display = "flex";
       document.getElementById("incomingCallInterface").style.display = "block";
       console.log("[Receiver] Showing incoming call overlay.");
 
@@ -275,6 +277,7 @@ socket.onmessage = async (event) => {
             document.getElementById("audioCallInterface").style.display = "block";
 
             // Only add audio tracks for audio call
+            localStream = stream;
             stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
 
             await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
@@ -939,6 +942,7 @@ function updateVideoCallDuration() {
 function addRemoteVideoTile(stream, name) {
     const grid = document.getElementById("remoteVideoGrid");
     if (!grid) return;
+    if (grid.querySelector('[data-name="' + name + '"]')) return;
     const tile = document.createElement("div");
     tile.className = "participant";
     tile.dataset.name = name;
@@ -946,6 +950,7 @@ function addRemoteVideoTile(stream, name) {
     vid.srcObject = stream;
     vid.autoplay = true;
     vid.playsInline = true;
+    vid.play().catch(() => {});
     const label = document.createElement("div");
     label.className = "name";
     label.textContent = name;
@@ -1016,7 +1021,7 @@ async function startAudioCall(receiver) {
     document.getElementById("callStatus").textContent = "Calling...";
     document.getElementById("audioCallInterface").style.display = "flex";
     document.getElementById("videoCallInterface").style.display = "none";
-    document.getElementById("callOverlay").style.display = "block";
+    document.getElementById("callOverlay").style.display = "flex";
 
     // Listen for signaling
     // socket.addEventListener("message", async (event) => {
@@ -1066,7 +1071,7 @@ async function startAudioCall(receiver) {
 document.getElementById("audioCallBtn").addEventListener("click", () => {
     console.log("Audio call button clicked");
     startAudioCall(activeReceiver);
-    document.getElementById("callOverlay").style.display = "block"; // show overlay
+    document.getElementById("callOverlay").style.display = "flex"; // show overlay
 });
 
 document.getElementById("hangupBtn").onclick = () => {
@@ -1135,27 +1140,37 @@ async function startVideoCall(receiver) {
   if (title) title.textContent = "Calling " + receiver + "...";
   document.getElementById("audioCallInterface").style.display = "none";
   document.getElementById("videoCallInterface").style.display = "block";
-  document.getElementById("callOverlay").style.display = "block";
+  document.getElementById("callOverlay").style.display = "flex";
 }
 
 // Audio signaling listener
 socket.addEventListener("message", async (event) => {
   const msg = JSON.parse(event.data);
-  if (msg.callType !== "audio") return; // ignore non-audio
+  if (msg.callType !== "audio") return;
 
   if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
-    await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-    callStartTime = Date.now();
-    durationInterval = setInterval(updateCallDuration, 1000);
-    document.getElementById("callStatus").textContent = "Connected";
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      for (const c of pendingAudioCandidates) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+      }
+      pendingAudioCandidates = [];
+      callStartTime = Date.now();
+      durationInterval = setInterval(updateCallDuration, 1000);
+      document.getElementById("callStatus").textContent = "Connected";
+    } catch (err) { console.error("[Audio] setRemoteDescription failed:", err); }
   }
 
   if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-    await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    if (!pc || !pc.remoteDescription) {
+      pendingAudioCandidates.push(msg.candidate);
+    } else {
+      try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+    }
   }
 
   if (msg.type === "call-end" && msg.receiver === loggedInUser) {
-    pc.close();
+    if (pc) pc.close();
     clearInterval(durationInterval);
     document.getElementById("callStatus").textContent = "Call ended";
     document.getElementById("callOverlay").style.display = "none";
@@ -1168,22 +1183,28 @@ socket.addEventListener("message", async (event) => {
   if (msg.callType !== "video") return;
 
   if (msg.type === "call-answer" && msg.receiver === loggedInUser) {
-    console.log("[Socket] Received video call-answer from:", msg.sender);
-    await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-    console.log("[VideoCall] Remote description set.");
-
-    videoCallStartTime = Date.now();
-    videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
-    document.getElementById("videoCallTitle").textContent = "Connected";
-    console.log("[VideoCall] Call connected, timer started.");
+    try {
+      await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      for (const c of pendingVideoCandidates) {
+        try { await videoPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+      }
+      pendingVideoCandidates = [];
+      videoCallStartTime = Date.now();
+      videoDurationInterval = setInterval(updateVideoCallDuration, 1000);
+      document.getElementById("videoCallTitle").textContent = "Connected";
+    } catch (err) { console.error("[Video] setRemoteDescription failed:", err); }
   }
 
   if (msg.type === "ice-candidate" && msg.receiver === loggedInUser) {
-    await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    if (!videoPc || !videoPc.remoteDescription) {
+      pendingVideoCandidates.push(msg.candidate);
+    } else {
+      try { await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+    }
   }
 
   if (msg.type === "call-end" && msg.receiver === loggedInUser) {
-    videoPc.close();
+    if (videoPc) videoPc.close();
     clearInterval(videoDurationInterval);
     document.getElementById("videoCallTitle").textContent = "Call Ended";
     clearVideoCall();
