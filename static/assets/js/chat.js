@@ -620,6 +620,40 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         reader.readAsDataURL(file);
     }
+        // 🔹 User list → Chat board toggle
+    document.querySelectorAll('.user-list .user').forEach(user => {
+        user.addEventListener('click', () => {
+            document.querySelector('.user-list').style.display = 'none';
+            document.querySelector('.chat-board').classList.add('active');
+        });
+    });
+
+    // 🔹 Swipe gesture for mobile
+    const chatBoard = document.querySelector('.chat-board');
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    if (chatBoard) {
+      chatBoard.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+      });
+
+      chatBoard.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+      });
+    }
+
+    function handleSwipe() {
+      const swipeDistance = touchStartX - touchEndX;
+
+      // Adjust threshold (e.g., 50px) to avoid accidental triggers
+      if (swipeDistance > 50) {
+        console.log("[DEBUG] Swipe left detected → back to user list");
+        chatBoard.classList.remove('active');
+        document.querySelector('.user-list').style.display = 'block';
+      }
+    }
 });
 
 // Audio upload handlers
