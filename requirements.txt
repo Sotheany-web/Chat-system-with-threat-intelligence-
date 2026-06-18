@@ -6,3 +6,5 @@ flask_sqlalchemy
 cryptography
 psycopg2-binary
 supabase
+joblib
+scikit-learn
