@@ -8,6 +8,26 @@ from modules.database import init_db, get_db
 from modules.auth import register_user, login_user
 from modules.database import get_all_users, save_message, get_chat_history
 
+from modules.ai_intelligence import predict_threat
+
+from modules.database import (
+    save_threat_log,
+    get_security_logs,
+    create_admin_alert,
+    get_admin_alerts
+)
+
+from modules.threat_detection import (
+    check_message_rate,
+    check_sql_injection,
+    check_sql_payload_for_chat,
+    check_file_upload,
+    record_event_for_intelligence,
+    should_block,
+    public_message,
+    final_security_decision
+)
+
 # for cryptography algo
 from flask_sqlalchemy import SQLAlchemy
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -24,7 +44,8 @@ import os
 import secrets as _secrets
 
 app = Flask(__name__)
-_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+_key_file = os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), '.secret_key')
 if os.environ.get("SECRET_KEY"):
     app.secret_key = os.environ.get("SECRET_KEY")
 elif os.path.exists(_key_file):
@@ -50,7 +71,13 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))   # secure_chat/
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # ensure local folder exists
 
-ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm', '.mp3', '.wav', '.pdf'}
+ALLOWED_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.mp4', '.webm', '.mp3', '.wav',
+    '.pdf', '.docx', '.txt', '.xlsx', '.pptx',
+    '.csv', '.zip',
+    '.py', '.html', '.css', '.js', '.php'
+}
 
 # Supabase client (only used if USE_SUPABASE=true)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -70,6 +97,18 @@ with app.app_context():
 
 connections = {}
 
+
+def save_admin_alert_if_needed(username, result, intel, decision):
+    if decision.get("admin_alert"):
+        create_admin_alert(
+            username=username,
+            rule_id=result.rule_id,
+            risk_score=intel["risk_score"],
+            threat_level=intel["threat_level"],
+            decision=decision["action"]
+        )
+
+
 @app.route('/')
 def home():
     print("[DEBUG] home() called")
@@ -77,17 +116,79 @@ def home():
     resp.headers["Location"] = url_for('login')
     return resp
 
+
+def detect_sql_payload_from_request(username, source_name):
+    values_to_check = []
+
+    for key, value in request.args.items():
+        values_to_check.append((key, value))
+
+    for key, value in request.form.items():
+        values_to_check.append((key, value))
+
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        for key, value in data.items():
+            values_to_check.append((key, str(value)))
+
+    for field_name, value in values_to_check:
+        result = check_sql_injection(username, value, field_name=field_name)
+
+        if result.status == "BLOCK":
+            intel = record_event_for_intelligence(username, result)
+
+            ai_prediction = predict_threat(
+                failed_logins=0,
+                messages=0,
+                sql_injection=1,
+                dangerous_file=0
+            )
+
+            decision = final_security_decision(
+                result=result,
+                intelligence=intel,
+                ai_prediction=ai_prediction,
+                context="request"
+            )
+
+            save_threat_log(
+                username=username,
+                event_type=source_name,
+                description=result.message,
+                rule_triggered=result.rule_id,
+                risk_score=intel["risk_score"],
+                threat_level=intel["threat_level"],
+                ai_prediction=ai_prediction,
+                status=result.status,
+                final_decision=decision["action"]
+            )
+
+            save_admin_alert_if_needed(username, result, intel, decision)
+            return result
+
+    return None
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        sql_result = detect_sql_payload_from_request(
+            request.form.get("username", "unknown"),
+            "LOGIN_SQL_PAYLOAD_CHECK"
+        )
+
+        if sql_result:
+            error = "Suspicious input detected. Login blocked."
+            return render_template('login.html', error=error)
 
         if not username or not password:
             error = "Invalid credentials"
             return render_template('login.html', error=error)
 
+        # result = login_user(username, password)
         result = login_user(username, password)
         print("LOGIN RESULT:", result, type(result))
 
@@ -102,12 +203,22 @@ def login():
 
     return render_template('login.html')
 
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     error = None
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        sql_result = detect_sql_payload_from_request(
+            request.form.get("username", "unknown"),
+            "REGISTER_SQL_PAYLOAD_CHECK"
+        )
+
+        if sql_result:
+            error = "Suspicious input detected. Registration blocked."
+            return render_template('register.html', error=error)
+
         result = register_user(username, password)
         if result == "success":
             resp = make_response("", 302)
@@ -115,6 +226,7 @@ def register():
             return resp
         error = result
     return render_template('register.html', error=error)
+
 
 @app.route('/dashboard')
 def dashboard():
@@ -127,6 +239,14 @@ def dashboard():
         return resp
 
     chat_user = request.args.get('chat_user')
+    sql_result = detect_sql_payload_from_request(
+        session.get("user", "unknown"),
+        "URL_SQL_PAYLOAD_CHECK"
+    )
+
+    if sql_result:
+        return jsonify({"error": "Suspicious URL parameter detected"}), 403
+
     users = get_all_users()
     valid_users = [u[0] for u in users]
 
@@ -147,6 +267,7 @@ def dashboard():
 
 # --- WEBSOCKET EVENTS (Flask-Sock) ---
 # connections = {}
+
 
 @sock.route("/ws")
 def websocket(ws):
@@ -183,10 +304,93 @@ def websocket(ws):
             if "ciphertext" in msg and "nonce" in msg:
                 ciphertext = msg.get("ciphertext")
                 nonce = msg.get("nonce")
+                sql_payload_detected = bool(
+                    msg.get("sql_payload_detected", False))
+
+                results = []
+
+                if sql_payload_detected:
+                    sql_result = check_sql_payload_for_chat(
+                        username,
+                        "' OR 1=1 --",
+                        field_name="client_chat_message"
+                    )
+                    results.append(sql_result)
+
+                message_result = check_message_rate(username)
+                results.append(message_result)
+
+                message_count = 0
+                sql_injection_flag = 0
+                dangerous_file_flag = 0
+                latest_intel = None
+                blocking_result = None
+                decision = None
+
+                for result in results:
+                    message_count = max(
+                        message_count,
+                        result.evidence.get("message_count", 0)
+                    )
+
+                    if result.rule_id == "R6" and result.status == "BLOCK":
+                        sql_injection_flag = 1
+
+                    if should_block(result):
+                        blocking_result = result
+
+                ai_prediction = predict_threat(
+                    failed_logins=0,
+                    messages=message_count,
+                    sql_injection=sql_injection_flag,
+                    dangerous_file=dangerous_file_flag
+                )
+
+                for result in results:
+                    latest_intel = record_event_for_intelligence(
+                        username, result)
+
+                    decision = final_security_decision(
+                        result=result,
+                        intelligence=latest_intel,
+                        ai_prediction=ai_prediction,
+                        context="chat"
+                    )
+
+                    save_threat_log(
+                        username=username,
+                        event_type="WEBSOCKET_TEXT_CHECK",
+                        description=result.message,
+                        rule_triggered=result.rule_id,
+                        risk_score=latest_intel["risk_score"],
+                        threat_level=latest_intel["threat_level"],
+                        ai_prediction=ai_prediction,
+                        message_count=message_count,
+                        file_count=0,
+                        status=result.status,
+                        final_decision=decision["action"]
+                    )
+
+                    save_admin_alert_if_needed(
+                        username, result, latest_intel, decision)
+
+                if decision and decision["allow"] is False:
+                    ws.send(json.dumps({
+                        "type": "security_alert",
+                        "message": public_message(blocking_result),
+                        "rule_id": blocking_result.rule_id if blocking_result else "UNKNOWN",
+                        "threat_level": latest_intel["threat_level"] if latest_intel else "HIGH",
+                        "risk_score": latest_intel["risk_score"] if latest_intel else 100,
+                        "findings": latest_intel["correlation_findings"] if latest_intel else [],
+                        "ai_prediction": ai_prediction,
+                    }))
+                    continue
 
                 if not receiver or not ciphertext or not nonce:
                     print(f"[DEBUG] Invalid text message from {username}")
                     continue
+
+                spam_detected = message_result.rule_id == "R4" and message_result.status == "ALERT"
 
                 payload = json.dumps({
                     "type": "text",
@@ -194,13 +398,16 @@ def websocket(ws):
                     "receiver": receiver,
                     "ciphertext": ciphertext,
                     "nonce": nonce,
+                    "sql_payload_detected": sql_payload_detected,
+                    "spam_detected": spam_detected,
                     "timestamp": datetime.now().isoformat()
                 })
 
                 # Save to DB
                 try:
                     save_message(username, receiver, ciphertext, nonce)
-                    print(f"[DEBUG] Saved text message from {username} to {receiver}")
+                    print(
+                        f"[DEBUG] Saved text message from {username} to {receiver}")
                 except Exception as e:
                     print(f"[DEBUG] Failed to save text message: {e}")
 
@@ -208,9 +415,11 @@ def websocket(ws):
                 if receiver in connections:
                     try:
                         connections[receiver].send(payload)
-                        print(f"[DEBUG] Forwarded text message from {username} to {receiver}")
+                        print(
+                            f"[DEBUG] Forwarded text message from {username} to {receiver}")
                     except Exception as e:
-                        print(f"[DEBUG] Failed to send text message to {receiver}: {e}")
+                        print(
+                            f"[DEBUG] Failed to send text message to {receiver}: {e}")
 
             # # --- Handle file/image messages ---
             # elif msg.get("type") in ["file", "image"]:
@@ -255,20 +464,22 @@ def websocket(ws):
             #             print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
             #     else:
             #         print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
-            
+
             # --- Handle call signaling ---
             elif msg.get("type") in ["call-offer", "call-answer", "ice-candidate", "call-end", "call-missed"]:
                 print(f"[DEBUG] Received {msg['type']} from {username}: {msg}")
 
                 if not receiver:
-                    print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver")
+                    print(
+                        f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver")
                     continue
 
                 payload = json.dumps({
                     "sender": username,
                     "receiver": receiver,
                     "type": msg["type"],
-                    "callType": msg.get("callType"),    # audio or video — must be forwarded
+                    # audio or video — must be forwarded
+                    "callType": msg.get("callType"),
                     "sdp": msg.get("sdp"),
                     "candidate": msg.get("candidate"),
                     "status": msg.get("status"),
@@ -283,14 +494,16 @@ def websocket(ws):
                             sender=username,
                             receiver=receiver,
                             msg_type="call",
-                            status=msg.get("status"),       # "ended" or "missed"
+                            # "ended" or "missed"
+                            status=msg.get("status"),
                             duration=msg.get("duration"),   # seconds if ended
                             timestamp=datetime.utcnow()
                         )
 
                         db.session.add(new_message)
                         db.session.commit()
-                        print(f"[DEBUG] Saved call log in DB for {username} -> {receiver}")
+                        print(
+                            f"[DEBUG] Saved call log in DB for {username} -> {receiver}")
                     except Exception as e:
                         db.session.rollback()
                         print(f"[DEBUG] Failed to save call log: {e}")
@@ -299,12 +512,14 @@ def websocket(ws):
                 if receiver in connections:
                     try:
                         connections[receiver].send(payload)
-                        print(f"[DEBUG] Forwarded {msg['type']} from {username} to {receiver}")
+                        print(
+                            f"[DEBUG] Forwarded {msg['type']} from {username} to {receiver}")
                     except Exception as e:
-                        print(f"[DEBUG] Failed to forward {msg['type']} to {receiver}: {e}")
+                        print(
+                            f"[DEBUG] Failed to forward {msg['type']} to {receiver}: {e}")
                 else:
-                    print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']}")
-
+                    print(
+                        f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']}")
 
     finally:
         if username and username in connections:
@@ -332,15 +547,17 @@ def messages(chat_user):
             "nonce": row[3],
             "file_name": row[4],
             "msg_type": row[5],
-            "url": url_for("uploaded_file", filename=row[4]) 
-                if row[5] in ("file","image") and row[4] else None,
+            "url": url_for("uploaded_file", filename=row[4])
+            if row[5] in ("file", "image") and row[4] else None,
             "timestamp": row[6].isoformat() if isinstance(row[6], datetime) else row[6]
         }
 
         # Add extra fields for call logs
         if row[5] == "call":
-            entry["status"] = row[7] if len(row) > 7 else None   # e.g. "ended", "missed"
-            entry["duration"] = row[8] if len(row) > 8 else None # seconds or formatted string
+            entry["status"] = row[7] if len(
+                row) > 7 else None   # e.g. "ended", "missed"
+            entry["duration"] = row[8] if len(
+                row) > 8 else None  # seconds or formatted string
 
         formatted.append(entry)
 
@@ -350,6 +567,8 @@ def messages(chat_user):
     return resp
 
 # ---------------- MODELS ----------------
+
+
 class Message(db.Model):
     __tablename__ = "messages"
 
@@ -373,14 +592,18 @@ class Message(db.Model):
 
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 # --- RSA key generation per user ---
 user_keys = {}
 
+
 def generate_rsa_keypair(username):
     if username not in user_keys:
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_key = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048)
         user_keys[username] = private_key
     return user_keys[username].public_key()
+
 
 @app.route("/conversation_key/<other_user>")
 def conversation_key(other_user):
@@ -392,6 +615,7 @@ def conversation_key(other_user):
     key = hashlib.sha256(raw.encode()).hexdigest()[:32]
     return jsonify({"key": key})
 
+
 @app.route("/public_key/<username>")
 def get_public_key(username):
     pub = generate_rsa_keypair(username)
@@ -402,6 +626,66 @@ def get_public_key(username):
     return pem.decode()
 
 # ---------------- UPLOAD ROUTES ----------------
+
+
+@app.route("/chat-threat-check", methods=["POST"])
+def chat_threat_check():
+    data = request.get_json(force=True)
+
+    username = data.get("username", "tester")
+    detected_type = data.get("type", "")
+
+    if detected_type != "sql_payload":
+        return jsonify({"error": "Use type = sql_payload"}), 400
+
+    result = check_sql_payload_for_chat(
+        username,
+        "' OR 1=1 --",
+        field_name="chat_message"
+    )
+
+    intel = record_event_for_intelligence(username, result)
+
+    ai_prediction = predict_threat(
+        failed_logins=0,
+        messages=0,
+        sql_injection=1,
+        dangerous_file=0
+    )
+
+    decision = final_security_decision(
+        result=result,
+        intelligence=intel,
+        ai_prediction=ai_prediction,
+        context="chat"
+    )
+
+    save_threat_log(
+        username=username,
+        event_type="CHAT_SQL_PAYLOAD_CHECK",
+        description=result.message,
+        rule_triggered=result.rule_id,
+        risk_score=intel["risk_score"],
+        threat_level=intel["threat_level"],
+        ai_prediction=ai_prediction,
+        status=result.status,
+        final_decision=decision["action"]
+    )
+
+    save_admin_alert_if_needed(username, result, intel, decision)
+
+    return jsonify({
+        "rule_id": result.rule_id,
+        "status": result.status,
+        "severity": result.severity,
+        "message": result.message,
+        "threat_level": intel["threat_level"],
+        "risk_score": intel["risk_score"],
+        "findings": intel["correlation_findings"],
+        "ai_prediction": ai_prediction
+    })
+
+
 @app.route("/send", methods=["POST"])
 def send_message():
     if 'user' not in session:
@@ -432,35 +716,86 @@ def send_message():
         print("[DEBUG] Failed to store message:", e)
         return jsonify({"error": "Failed to store message"}), 500
 
+
 @app.route("/upload_file", methods=["POST"])
 def upload_file():
     print("[DEBUG] /upload_file route called")
-    print("[DEBUG] request.form:", request.form)
-    print("[DEBUG] request.files:", request.files)
 
     if "user" not in session:
-        print("[DEBUG] Not logged in")
         return jsonify({"error": "Not logged in"}), 403
 
     if "file" not in request.files:
-        print("[DEBUG] No file in request.files")
         return jsonify({"error": "Missing file"}), 400
-    
+
     try:
         file = request.files["file"]
         receiver = request.form.get("receiver")
-        print("[DEBUG] Receiver value:", receiver)
 
         if not receiver:
             return jsonify({"error": "Missing receiver"}), 400
-        if "file" not in request.files:
-            print("[DEBUG] No file in request.files")
-            return jsonify({"error": "Missing file"}), 400
 
         filename = secure_filename(file.filename)
+        file_size = request.content_length or 0
+
+        file_result = check_file_upload(session["user"], filename, file_size)
+        intel = record_event_for_intelligence(session["user"], file_result)
+
+        dangerous_file_flag = 1 if file_result.rule_id == "R7" else 0
+
+        ai_prediction = predict_threat(
+            failed_logins=0,
+            messages=0,
+            sql_injection=0,
+            dangerous_file=dangerous_file_flag
+        )
+
+        decision = final_security_decision(
+            result=file_result,
+            intelligence=intel,
+            ai_prediction=ai_prediction,
+            context="file_upload"
+        )
+
+        save_threat_log(
+            username=session["user"],
+            event_type="UPLOAD_FILE_CHECK",
+            description=file_result.message,
+            rule_triggered=file_result.rule_id,
+            risk_score=intel["risk_score"],
+            threat_level=intel["threat_level"],
+            ai_prediction=ai_prediction,
+            file_count=file_result.evidence.get("file_count_5min", 0),
+            status=file_result.status,
+            final_decision=decision["action"]
+        )
+
+        save_admin_alert_if_needed(
+            session["user"], file_result, intel, decision)
+
+        if decision["allow"] is False:
+            return jsonify({
+                "type": "security_alert",
+                "message": decision["user_message"],
+                "rule_id": file_result.rule_id,
+                "risk_score": intel["risk_score"],
+                "threat_level": intel["threat_level"],
+                "ai_prediction": ai_prediction,
+                "decision": decision["action"]
+            }), 403
+
         ext = os.path.splitext(filename)[1].lower() or ".dat"
+
         if ext not in ALLOWED_EXTENSIONS:
-            return jsonify({"error": "Unsupported file type"}), 400
+            return jsonify({
+                "type": "security_alert",
+                "message": "Unsupported file type.",
+                "rule_id": file_result.rule_id,
+                "risk_score": intel["risk_score"],
+                "threat_level": intel["threat_level"],
+                "ai_prediction": ai_prediction,
+                "decision": decision["action"]
+            }), 400
+
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
@@ -471,7 +806,8 @@ def upload_file():
         else:
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             file.save(filepath)
-            url = url_for("uploaded_file", filename=unique_name, _external=True)
+            url = url_for("uploaded_file",
+                          filename=unique_name, _external=True)
 
         new_message = Message(
             sender=session["user"],
@@ -483,28 +819,36 @@ def upload_file():
 
         db.session.add(new_message)
         db.session.commit()
-        print("[DEBUG] File message stored in DB")
 
         payload = json.dumps({
+            "type": "file",
             "sender": session["user"],
             "receiver": receiver,
-            "file_url": url,
-            "msg_type": "file",
+            "url": url,
+            "filename": unique_name,
+            "dangerous_file_detected": file_result.rule_id == "R7",
+            "abnormal_file_detected": file_result.rule_id == "R5",
             "timestamp": datetime.utcnow().isoformat()
         })
-        if receiver in connections:
-            try:
-                connections[receiver].send(payload)
-            except Exception as e:
-                print(f"[DEBUG] Failed to forward file message to {receiver}: {e}")
 
-        return jsonify({"status": "success", "url": url}), 201
+        if receiver in connections:
+            connections[receiver].send(payload)
+
+        return jsonify({
+            "status": "success",
+            "url": url,
+            "filename": unique_name,
+            "dangerous_file_detected": file_result.rule_id == "R7",
+            "abnormal_file_detected": file_result.rule_id == "R5"
+        }), 201
 
     except Exception as e:
         db.session.rollback()
         print("[DEBUG] Failed to store file message:", e)
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Failed to store file"}), 500
+
 
 @app.route("/upload_image", methods=["POST"])
 def upload_image():
@@ -520,13 +864,13 @@ def upload_image():
         if "image" not in request.files:
             print("[DEBUG] No image in request.files")
             return jsonify({"error": "Missing image"}), 400
-    
+
         image = request.files["image"]
         receiver = request.form.get("receiver")
         print("[DEBUG] Receiver value:", receiver)
         if not receiver:
             return jsonify({"error": "Missing receiver"}), 400
-        
+
         filename = secure_filename(image.filename)
         ext = os.path.splitext(filename)[1].lower() or ".jpg"
         if ext not in ALLOWED_EXTENSIONS:
@@ -541,7 +885,8 @@ def upload_image():
         else:
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             image.save(filepath)
-            url = url_for("uploaded_file", filename=unique_name, _external=True)
+            url = url_for("uploaded_file",
+                          filename=unique_name, _external=True)
 
         new_message = Message(
             sender=session["user"],
@@ -557,11 +902,14 @@ def upload_image():
 
     except Exception as e:
         db.session.rollback()
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         print("[DEBUG] Failed to store image message:", e)
         return jsonify({"error": "Failed to store image"}), 500
 
 # --- New route for audio uploads ---
+
+
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
     print("[DEBUG] /upload_audio route called")
@@ -581,8 +929,9 @@ def upload_audio():
         if not audio:
             print("[DEBUG] No audio in request.files")
             return jsonify({"error": "Missing audio"}), 400
-        
-        ext = os.path.splitext(secure_filename(audio.filename))[1].lower() or ".webm"
+
+        ext = os.path.splitext(secure_filename(audio.filename))[
+            1].lower() or ".webm"
         if ext not in ALLOWED_EXTENSIONS:
             return jsonify({"error": "Unsupported file type"}), 400
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
@@ -595,7 +944,8 @@ def upload_audio():
         else:
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             audio.save(filepath)
-            url = url_for("uploaded_file", filename=unique_name, _external=True)
+            url = url_for("uploaded_file",
+                          filename=unique_name, _external=True)
 
         new_message = Message(
             sender=session["user"],
@@ -614,22 +964,25 @@ def upload_audio():
             "sender": session["user"],
             "receiver": receiver,
             "url": url,
-            "msg_type": "audio",
+            "type": "audio",
             "timestamp": datetime.utcnow().isoformat()
         })
         if receiver in connections:
             try:
                 connections[receiver].send(payload)
             except Exception as e:
-                print(f"[DEBUG] Failed to forward audio message to {receiver}: {e}")
+                print(
+                    f"[DEBUG] Failed to forward audio message to {receiver}: {e}")
 
         return jsonify({"status": "success", "url": url}), 201
 
     except Exception as e:
         db.session.rollback()
-        import traceback; traceback.print_exc()
+        import traceback
+        traceback.print_exc()
         print("[DEBUG] Failed to store audio message:", e)
         return jsonify({"error": "Failed to store audio"}), 500
+
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
@@ -644,11 +997,14 @@ def uploaded_file(filename):
         url = supabase.storage.from_("uploads").get_public_url(filename)
         return redirect(url)
     else:
-        resp = send_from_directory(UPLOAD_FOLDER, filename, as_attachment=False)
+        resp = send_from_directory(
+            UPLOAD_FOLDER, filename, as_attachment=False)
         resp.headers['Content-Security-Policy'] = "default-src 'none'"
         return resp
 
 # Temporary debug route
+
+
 @app.route("/debug-messages")
 def debug_messages():
     if not app.debug:
@@ -678,9 +1034,10 @@ def debug_messages():
 
     return {"messages": messages}
 
+
 # ---------------- STARTUP ----------------
 if __name__ == "__main__":
-   
+
     port = int(os.environ.get("PORT", 5000))  # Render sets PORT
     app.run(host="0.0.0.0", port=port, debug=True)
 # if __name__ == "__main__":
