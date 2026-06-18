@@ -1,5 +1,6 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,64 +11,69 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/image-lightbox.css') }}">
 
     <style>
-    .profile-popup {
-    position: absolute;
-    background: white;
-    border: 1px solid #ddd;
-    padding: 10px;
-    border-radius: 10px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-    display: none;
-    z-index: 9999;
-    }
+        .profile-popup {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            display: none;
+            z-index: 9999;
+        }
 
-    .popup-content {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+        .popup-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-    .popup-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-    }
-    .profile-name {
-    text-align: center;
-    font-size: 12px;
-    margin-top: 5px;
-    color: #333;
-    word-break: break-word;
-    }
-    .logo {
-    height: 36px;
-    width: auto;
-    }
+        .popup-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .profile-name {
+            text-align: center;
+            font-size: 12px;
+            margin-top: 5px;
+            color: #333;
+            word-break: break-word;
+        }
+
+        .logo {
+            height: 36px;
+            width: auto;
+        }
     </style>
-    
+
 </head>
+
 <body data-theme="light">
     <div class="chat-app">
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="vertical-nav" id="verticalNav">
                 <div class="nav-icon tab-swtich mb-3rem">
-                    
-                        <svg width="160" height="52" viewBox="0 0 160 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <text x="0" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif"
-                                font-size="42" font-weight="900" fill="#2860b0" letter-spacing="-1.5">Talk</text>
-                            <text x="114" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif"
-                                font-size="42" font-weight="900" fill="#0a1e3c" letter-spacing="-1.5">y</text>
-                            <circle cx="148" cy="11" r="10" fill="#2860b0" opacity="0.2"/>
-                            <circle cx="148" cy="11" r="6" fill="#2860b0"/>
-                       
-                    </a>
+
+                    <svg width="160" height="52" viewBox="0 0 160 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <text x="0" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif" font-size="42"
+                            font-weight="900" fill="#2860b0" letter-spacing="-1.5">Talk</text>
+                        <text x="114" y="40" font-family="'DM Sans', 'Open Sans', Arial Black, sans-serif"
+                            font-size="42" font-weight="900" fill="#0a1e3c" letter-spacing="-1.5">y</text>
+                        <circle cx="148" cy="11" r="10" fill="#2860b0" opacity="0.2" />
+                        <circle cx="148" cy="11" r="6" fill="#2860b0" />
+
+                        </a>
                 </div>
-                                
+
                 <div class="nav-icon has-badge active tab-swtich" data-tab="chats">
-                    <i class="fas fa-comment-dots"></i><span class="badge" id="unreadBadge" style="display:none;"></span>
+                    <i class="fas fa-comment-dots"></i><span class="badge" id="unreadBadge"
+                        style="display:none;"></span>
                 </div>
                 <div class="nav-icon tab-swtich" data-tab="profile"><i class="fas fa-user"></i></div>
                 <div class="nav-icon tab-swtich" data-tab="contacts"><i class="fas fa-book"></i></div>
@@ -90,13 +96,14 @@
                             </svg>
                         </button>
                         <div class="user-profile dropdown " id="userProfileBtn">
-                            <button class="dropdown-btn" aria-haspopup="true" data-dir="right top" aria-expanded="false">
+                            <button class="dropdown-btn" aria-haspopup="true" data-dir="right top"
+                                aria-expanded="false">
                                 <div class="user-avatar-initial">{{ username[0]|upper }}</div>
                                 <div class="profile-name">
                                     {{ username }}
                                 </div>
                             </button>
-                            
+
                             <ul class="dropdown-menu setting-menu" aria-label="Setting">
                                 <li>
                                     <a href="#"><i class="fas fa-info-circle"></i>Info</a>
@@ -133,26 +140,26 @@
                 <div class="sidebar-container">
                     <div class="users-list">
                         {% for u in users %}
-                            {% if u[0] != username %}
+                        {% if u[0] != username %}
 
-                            <div class="user-item" data-user="{{ u[0] }}">
-                                
-                                <div class="user-avatar online">
-                                    {{ u[0][0] | upper }}
-                                </div>
+                        <div class="user-item" data-user="{{ u[0] }}">
 
-                                <div class="user-info">
-                                    <div class="user-name">{{ u[0] }}</div>
-                                    <div class="user-message">Start conversation...</div>
-                                </div>
-
-                                <div class="user-meta">
-                                    <div class="message-time">--</div>
-                                </div>
-
+                            <div class="user-avatar online">
+                                {{ u[0][0] | upper }}
                             </div>
 
-                            {% endif %}
+                            <div class="user-info">
+                                <div class="user-name">{{ u[0] }}</div>
+                                <div class="user-message">Start conversation...</div>
+                            </div>
+
+                            <div class="user-meta">
+                                <div class="message-time">--</div>
+                            </div>
+
+                        </div>
+
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </div>
@@ -460,27 +467,30 @@
             </div>
             <div class="tab-panel" id="tab-settings" hidden>
                 <div class="sidebar-header banner" id="backgroundOverlay">
-                <div class="header-content">
-                    <h1 class="settings-title">Settings</h1>
-                    <button class="edit-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
-                    </button>
-                    <input type="file" id="backgroundInput" accept="image/*" style="display: none;">
-                </div>
+                    <div class="header-content">
+                        <h1 class="settings-title">Settings</h1>
+                        <button class="edit-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                        </button>
+                        <input type="file" id="backgroundInput" accept="image/*" style="display: none;">
+                    </div>
                 </div>
                 <div class="profile-section">
                     <div class="profile-photo-container">
-                    <div class="user-avatar-initial" id="profileImage">{{ username[0]|upper }}</div>
-                    <button class="camera-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                        <circle cx="12" cy="13" r="4" />
-                        </svg>
-                    </button>
-                    <input type="file" id="profileInput" accept="image/*" style="display: none;">
+                        <div class="user-avatar-initial" id="profileImage">{{ username[0]|upper }}</div>
+                        <button class="camera-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path
+                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                <circle cx="12" cy="13" r="4" />
+                            </svg>
+                        </button>
+                        <input type="file" id="profileInput" accept="image/*" style="display: none;">
                     </div>
                 </div>
                 <div class="sidebar-container">
@@ -619,10 +629,10 @@
                     </button>
                     <div class="chat-user-info" id="chatUserInfo">
                         <div class="chat-avatar currentChatAvatar">
-                            {{ chat_user[0] }}   <!-- changed -->
+                            {{ chat_user[0]|upper if chat_user else "?" }}
                         </div>
                         <div class="chat-user-details">
-                            <h3 class="currentChatName">{{ chat_user }}</h3>    <!-- changed -->
+                            <h3 class="currentChatName">{{ chat_user if chat_user else "Select a chat" }}</h3>
                             <div class="chat-user-status">Active now</div>
                         </div>
                     </div>
@@ -652,7 +662,7 @@
                         </svg>
                     </button>
 
-                     <div class="dropdown">
+                    <div class="dropdown">
                         <button class="dropdown-btn action-btn" data-dir="bottom left" aria-label="More options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
@@ -668,7 +678,7 @@
                             <li>
                                 <a href="#">Muted <i class="fa-solid fa-volume-xmark"></i></a>
                             </li>
-                             <li>
+                            <li>
                                 <a href="#">Delete Chat <i class="fa-solid fa-trash-can"></i></a>
                             </li>
                             <li>
@@ -1160,7 +1170,7 @@
             </div>
         </div>
         <div class="video-call-interface" id="videoCallInterface" style="display:none;">
-             <div class="video-wrapper">
+            <div class="video-wrapper">
                 <div class="video-call-container">
                     <div class="call-header">
                         <div class="call-info">
@@ -1185,9 +1195,12 @@
                         </div>
                     </div>
                     <div class="call-controls">
-                        <button class="control-btn mic-btn active" id="videoMuteBtn" data-tooltip="Mute"><i class="fas fa-microphone"></i></button>
-                        <button class="control-btn video-btn" id="videoCamBtn" data-tooltip="Stop Video"><i class="fas fa-video"></i></button>
-                        <button class="control-btn end-call-btn" id="videoHangupBtn" data-tooltip="End Call"><i class="fas fa-phone-slash"></i></button>
+                        <button class="control-btn mic-btn active" id="videoMuteBtn" data-tooltip="Mute"><i
+                                class="fas fa-microphone"></i></button>
+                        <button class="control-btn video-btn" id="videoCameraBtn" data-tooltip="Stop Video"><i
+                                class="fas fa-video"></i></button>
+                        <button class="control-btn end-call-btn" id="videoHangupBtn" data-tooltip="End Call"><i
+                                class="fas fa-phone-slash"></i></button>
                     </div>
                 </div>
             </div>
@@ -1240,43 +1253,47 @@
     </div>
 
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
 
-    const icon = document.querySelector('[data-tab="profile"]');
-    const popup = document.getElementById('profilePopup');
+            const icon = document.querySelector('[data-tab="profile"]');
+            const popup = document.getElementById('profilePopup');
 
-    icon.addEventListener('click', function (e) {
-        e.stopPropagation();
+            icon.addEventListener('click', function (e) {
+                e.stopPropagation();
 
-        const rect = icon.getBoundingClientRect();
+                const rect = icon.getBoundingClientRect();
 
-        popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-        popup.style.left = (rect.left + window.scrollX) + 'px';
+                popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+                popup.style.left = (rect.left + window.scrollX) + 'px';
 
-        popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
-    });
+                popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
+            });
 
-    document.addEventListener('click', function () {
-        popup.style.display = 'none';
-    });
+            document.addEventListener('click', function () {
+                popup.style.display = 'none';
+            });
 
-});
-</script>
+        });
+    </script>
 
-<!-- Define chatUser from Flask template -->
-<script>
-  const chatUser = "{{ chat_user }}";
-  const loggedInUser = "{{ username }}";
-</script>
+    <script src="{{ url_for('static', filename='assets/js/smart-dropdown.js') }}"></script>
+    <script src="{{ url_for('static', filename='assets/js/accordion.js') }}"></script>
+    <script src="{{ url_for('static', filename='assets/js/image-lightbox.js') }}"></script>
+    <script src="{{ url_for('static', filename='assets/js/script.js') }}"></script>
 
-<!-- Load your crypto logic -->
-<script src="{{ url_for('static', filename='assets/js/crypto.js') }}"></script>
+    <!-- Define chatUser from Flask template -->
+    <script>
+        const chatUser = "{{ chat_user }}";
+        const loggedInUser = "{{ username }}";
+    </script>
 
-<!-- Load your chat logic (handles send button, receive messages, etc.) -->
-<script src="{{ url_for('static', filename='assets/js/chat.js') }}"></script>
+    <!-- Load your crypto logic -->
+    <script src="{{ url_for('static', filename='assets/js/crypto.js') }}"></script>
+
+    <!-- Load your chat logic (handles send button, receive messages, etc.) -->
+    <script src="{{ url_for('static', filename='assets/js/chat.js') }}"></script>
 
 </body>
 
 </html>
-

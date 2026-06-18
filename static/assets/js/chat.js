@@ -87,19 +87,40 @@ socket.onmessage = async (event) => {
   try {
     const msg = JSON.parse(event.data);
 
+    // if (msg.type === "file" || msg.type === "image") {
+    //   const _imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
+    //   const _who = msg.sender === loggedInUser ? "Me" : msg.sender;
+    //   if (msg.type === "image") {
+    //     addMessageToUI(_who, makeMediaNode('img', msg.url), null);
+    //   } else {
+    //     const _ext = (msg.url || "").split(".").pop().split("?")[0].toLowerCase();
+    //     if (_imgExts.includes(_ext)) {
+    //       addMessageToUI(_who, makeMediaNode('img', msg.url), null);
+    //     } else {
+    //       addMessageToUI(_who, makeMediaNode('file', msg.url), null);
+    //     }
+    //   }
+    //   return;
+    // }
+
     if (msg.type === "file" || msg.type === "image") {
-      const _imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
-      const _who = msg.sender === loggedInUser ? "Me" : msg.sender;
-      if (msg.type === "image") {
-        addMessageToUI(_who, makeMediaNode('img', msg.url), null);
-      } else {
-        const _ext = (msg.url || "").split(".").pop().split("?")[0].toLowerCase();
-        if (_imgExts.includes(_ext)) {
-          addMessageToUI(_who, makeMediaNode('img', msg.url), null);
-        } else {
-          addMessageToUI(_who, makeMediaNode('file', msg.url), null);
-        }
+      const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+
+      let warning = "";
+
+      if (msg.dangerous_file_detected) {
+        warning = `⚠️ High-risk file detected: ${msg.filename || "unknown file"}\nThis file type may be dangerous.\n\n`;
+      } else if (msg.abnormal_file_detected) {
+        warning = "⚠️ Security notice: abnormal file upload activity detected.\n\n";
       }
+
+      if (msg.type === "image") {
+        addMessageToUI(who, makeMediaNode("img", msg.url), msg.timestamp);
+      } else {
+        const fileNode = makeMediaNode("file", msg.url, warning + (msg.filename || "Download file"));
+        addMessageToUI(who, fileNode, msg.timestamp);
+      }
+
       return;
     }
 
@@ -117,7 +138,7 @@ socket.onmessage = async (event) => {
       const chatPartner = msg.sender === loggedInUser ? msg.receiver : msg.sender;
       // Ensure we have a key for this conversation (may arrive before user opens chat)
       if (!_aesKeyMap[chatPartner]) {
-        try { await generateAESKey(chatPartner); } catch (_) {}
+        try { await generateAESKey(chatPartner); } catch (_) { }
       }
       let plaintext;
       try {
@@ -127,8 +148,30 @@ socket.onmessage = async (event) => {
         plaintext = "[Decryption failed]";
       }
       // Only render in chat if this is the active conversation
+      // if (chatPartner === activeReceiver) {
+      //   addMessageToUI(msg.sender === loggedInUser ? "Me" : msg.sender, plaintext, msg.timestamp);
+      // }
+
       if (chatPartner === activeReceiver) {
-        addMessageToUI(msg.sender === loggedInUser ? "Me" : msg.sender, plaintext, msg.timestamp);
+        let displayText = plaintext;
+
+        if (msg.sender !== loggedInUser) {
+          if (msg.spam_detected) {
+            displayText =
+              `⚠️ Security notice: high message rate detected from this sender.\n\n${plaintext}`;
+          }
+
+          if (msg.sql_payload_detected) {
+            displayText =
+              `⚠️ Security notice: this message contains suspicious code patterns.\n\n${plaintext}`;
+          }
+        }
+
+        addMessageToUI(
+          msg.sender === loggedInUser ? "Me" : msg.sender,
+          displayText,
+          msg.timestamp
+        );
       }
       return;
     }
@@ -252,7 +295,7 @@ socket.onmessage = async (event) => {
             await videoPc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
             for (const candidate of pendingCandidates) {
-              try { await videoPc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
+              try { await videoPc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) { }
             }
             pendingCandidates = [];
 
@@ -283,7 +326,7 @@ socket.onmessage = async (event) => {
             await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
             for (const candidate of pendingCandidates) {
-              try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
+              try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) { }
             }
             pendingCandidates = [];
 
@@ -313,7 +356,7 @@ socket.onmessage = async (event) => {
           const errHint = document.getElementById("incomingCallPrompt");
           if (errHint) errHint.textContent = err.name === "NotAllowedError" ? "Microphone permission denied" : "Could not start call: " + err.message;
         }
-        };
+      };
 
       // Decline button
       document.getElementById("declineCallBtn").onclick = () => {
@@ -341,7 +384,7 @@ socket.onmessage = async (event) => {
       document.getElementById("videoCallTitle").textContent = "Call Ended";
       document.getElementById("callOverlay").style.display = "none";
       clearVideoCall();
-      if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
+      if (document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
     }
 
   } catch (err) {
@@ -481,8 +524,15 @@ function safeMediaUrl(url) {
   try {
     const p = new URL(url, window.location.origin);
     if (p.protocol === 'https:' || p.protocol === 'http:') return url;
-  } catch (_) {}
+  } catch (_) { }
   return null;
+}
+
+//----Dangerous file helper----
+function isDangerousFile(filename) {
+  const dangerous = [".exe", ".bat", ".cmd", ".sh", ".php", ".js", ".jar", ".py", ".ps1", ".vbs", ".msi"];
+  const lower = filename.toLowerCase();
+  return dangerous.some(ext => lower.endsWith(ext));
 }
 
 function makeMediaNode(type, url, filename) {
@@ -509,7 +559,7 @@ function makeMediaNode(type, url, filename) {
   return a;
 }
 
-function addMessageToUI(sender, content, timestamp=null) {
+function addMessageToUI(sender, content, timestamp = null) {
   const chatBox = document.getElementById("chatMessages");
   const messageDiv = document.createElement("div");
   messageDiv.className = sender === "Me" ? "message sent" : "message received";
@@ -542,7 +592,7 @@ function addMessageToUI(sender, content, timestamp=null) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function addCallLogToUI(callInfo, timestamp=null) {
+function addCallLogToUI(callInfo, timestamp = null) {
   const chatBox = document.getElementById("chatMessages");
   const div = document.createElement("div");
   div.className = "message call-log";
@@ -565,6 +615,22 @@ function addCallLogToUI(callInfo, timestamp=null) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+function detectSQLiBeforeEncrypt(text) {
+  const patterns = [
+    /'\s*or\s*1\s*=\s*1/i,
+    /\bor\s+1\s*=\s*1\b/i,
+    /--/,
+    /\/\*/,
+    /\*\//,
+    /\bunion\s+select\b/i,
+    /\bdrop\s+table\b/i,
+    /\binsert\s+into\b/i,
+    /\bdelete\s+from\b/i
+  ];
+
+  return patterns.some(pattern => pattern.test(text));
+}
+
 // Send button + encrypt the message
 document.getElementById("sendButton").addEventListener("click", async () => {
   const input = document.getElementById("messageInput");
@@ -572,13 +638,29 @@ document.getElementById("sendButton").addEventListener("click", async () => {
 
   if (message !== "" && activeReceiver) {
     try {
+
+      const sqlPayloadDetected = detectSQLiBeforeEncrypt(message);
+
+      if (sqlPayloadDetected) {
+        fetch("/chat-threat-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: loggedInUser,
+            type: "sql_payload"
+          })
+        });
+      }
+
+
       // Encrypt with AES before sending
-      const { ciphertext, nonce } = await encryptMessage(message);
+      const { ciphertext, nonce } = await encryptMessage(message, activeReceiver);
 
       socket.send(JSON.stringify({
         receiver: activeReceiver,
         ciphertext,
-        nonce
+        nonce,
+        sql_payload_detected: sqlPayloadDetected
       }));
 
       // Show plaintext locally with current time
@@ -600,500 +682,518 @@ document.getElementById("messageInput").addEventListener("keypress", (e) => {
 
 // File and image upload handlers
 document.addEventListener("DOMContentLoaded", () => {
-    const attachFileBtn = document.getElementById("attachFileBtn");
-    const fileInput = document.getElementById("fileInput");
-    const sendImageBtn = document.getElementById("sendImageBtn");
-    const imageInput = document.getElementById("imageInput");
-    const filePreview = document.getElementById("filePreview");
+  const attachFileBtn = document.getElementById("attachFileBtn");
+  const fileInput = document.getElementById("fileInput");
+  const sendImageBtn = document.getElementById("sendImageBtn");
+  const imageInput = document.getElementById("imageInput");
+  const filePreview = document.getElementById("filePreview");
 
-    // Attach File button → open file picker
-    attachFileBtn.addEventListener("click", () => {
-        console.log("[DEBUG] attachFileBtn clicked");
-        if (!fileInput) {
-            console.error("[DEBUG] fileInput element not found!");
-            return;
-        }
-        fileInput.click();
-    });
-
-    fileInput.addEventListener("change", () => {
-        console.log("[DEBUG] fileInput onchange triggered");
-        if (fileInput.files.length > 0) {
-            const file = fileInput.files[0];
-            console.log("[DEBUG] Selected file:", file.name);
-            previewFile(file);
-            if (file.type.startsWith("image/")) {
-                sendImage(file);
-            } else {
-                sendFile(file);
-            }
-        } else {
-            console.warn("[DEBUG] No file selected");
-        }
-    });
-
-    // Send Image button → open image picker
-    sendImageBtn.addEventListener("click", () => {
-        console.log("[DEBUG] sendImageBtn clicked");
-        if (!imageInput) {
-            console.error("[DEBUG] imageInput element not found!");
-            return;
-        }
-        imageInput.click();
-    });
-
-    imageInput.addEventListener("change", () => {
-        console.log("[DEBUG] imageInput onchange triggered");
-        if (imageInput.files.length > 0) {
-            const image = imageInput.files[0];
-            console.log("[DEBUG] Selected image:", image.name);
-            // Show preview
-            previewFile(image);
-            // upload
-            sendImage(image);
-        } else {
-            console.warn("[DEBUG] No image selected");
-        }
-    });
-        // Preview function
-    function previewFile(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            if (file.type.startsWith("image/")) {
-                filePreview.innerHTML = `<img src="${e.target.result}" alt="${file.name}" style="max-width:150px; max-height:150px;">`;
-            } else {
-                filePreview.innerHTML = `<p>Selected file: ${file.name}</p>`;
-            }
-        };
-        reader.readAsDataURL(file);
+  // Attach File button → open file picker
+  attachFileBtn.addEventListener("click", () => {
+    console.log("[DEBUG] attachFileBtn clicked");
+    if (!fileInput) {
+      console.error("[DEBUG] fileInput element not found!");
+      return;
     }
-        // 🔹 User list → Chat board toggle
-    document.querySelectorAll('.user-list .user').forEach(user => {
-        user.addEventListener('click', () => {
-            document.querySelector('.user-list').style.display = 'none';
-            document.querySelector('.chat-board').classList.add('active');
-        });
-    });
+    fileInput.click();
+  });
 
-    // 🔹 Swipe gesture for mobile
-    const chatBoard = document.querySelector('.chat-board');
-    let touchStartX = 0;
-    let touchEndX = 0;
-
-    if (chatBoard) {
-      chatBoard.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-      });
-
-      chatBoard.addEventListener('touchend', (e) => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-      });
-    }
-
-    function handleSwipe() {
-      const swipeDistance = touchStartX - touchEndX;
-
-      // Adjust threshold (e.g., 50px) to avoid accidental triggers
-      if (swipeDistance > 50) {
-        console.log("[DEBUG] Swipe left detected → back to user list");
-        chatBoard.classList.remove('active');
-        document.querySelector('.user-list').style.display = 'block';
+  fileInput.addEventListener("change", () => {
+    console.log("[DEBUG] fileInput onchange triggered");
+    if (fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      console.log("[DEBUG] Selected file:", file.name);
+      previewFile(file);
+      if (file.type.startsWith("image/")) {
+        sendImage(file);
+      } else {
+        sendFile(file);
       }
+    } else {
+      console.warn("[DEBUG] No file selected");
     }
+  });
+
+  // Send Image button → open image picker
+  sendImageBtn.addEventListener("click", () => {
+    console.log("[DEBUG] sendImageBtn clicked");
+    if (!imageInput) {
+      console.error("[DEBUG] imageInput element not found!");
+      return;
+    }
+    imageInput.click();
+  });
+
+  imageInput.addEventListener("change", () => {
+    console.log("[DEBUG] imageInput onchange triggered");
+    if (imageInput.files.length > 0) {
+      const image = imageInput.files[0];
+      console.log("[DEBUG] Selected image:", image.name);
+      // Show preview
+      previewFile(image);
+      // upload
+      sendImage(image);
+    } else {
+      console.warn("[DEBUG] No image selected");
+    }
+  });
+  // Preview function
+  function previewFile(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      if (file.type.startsWith("image/")) {
+        filePreview.innerHTML = `<img src="${e.target.result}" alt="${file.name}" style="max-width:150px; max-height:150px;">`;
+      } else {
+        filePreview.innerHTML = `<p>Selected file: ${file.name}</p>`;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+  // 🔹 User list → Chat board toggle
+  document.querySelectorAll('.user-list .user').forEach(user => {
+    user.addEventListener('click', () => {
+      document.querySelector('.user-list').style.display = 'none';
+      document.querySelector('.chat-board').classList.add('active');
+    });
+  });
+
+  // 🔹 Swipe gesture for mobile
+  const chatBoard = document.querySelector('.chat-board');
+  let touchStartX = 0;
+  let touchEndX = 0;
+
+  if (chatBoard) {
+    chatBoard.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+
+    chatBoard.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    });
+  }
+
+  function handleSwipe() {
+    const swipeDistance = touchStartX - touchEndX;
+
+    // Adjust threshold (e.g., 50px) to avoid accidental triggers
+    if (swipeDistance > 50) {
+      console.log("[DEBUG] Swipe left detected → back to user list");
+      chatBoard.classList.remove('active');
+      document.querySelector('.user-list').style.display = 'block';
+    }
+  }
 });
 
 // Audio upload handlers
 document.addEventListener("DOMContentLoaded", () => {
-    const sendAudioBtn = document.getElementById("sendAudioBtn");
+  const sendAudioBtn = document.getElementById("sendAudioBtn");
 
-    sendAudioBtn.addEventListener("click", () => {
-        console.log("[DEBUG] sendAudioBtn clicked");
-        startRecording();
-    });
+  sendAudioBtn.addEventListener("click", () => {
+    console.log("[DEBUG] sendAudioBtn clicked");
+    startRecording();
+  });
 });
 
 // Audio and video call controls handlers 
 document.addEventListener("DOMContentLoaded", () => {
-    // Audio call controls
-    document.getElementById("muteBtn").addEventListener("click", () => {
-        if (localStream) {
-            const track = localStream.getAudioTracks()[0];
-            track.enabled = !track.enabled;
-        }
-    });
+  // Audio call controls
+  document.getElementById("muteBtn").addEventListener("click", () => {
+    if (localStream) {
+      const track = localStream.getAudioTracks()[0];
+      track.enabled = !track.enabled;
+    }
+  });
 
-    document.getElementById("hangupBtn").addEventListener("click", () => {
-        if (pc) pc.close();
-        document.getElementById("callStatus").textContent = "Call ended";
-    });
+  document.getElementById("hangupBtn").addEventListener("click", () => {
+    if (pc) pc.close();
+    document.getElementById("callStatus").textContent = "Call ended";
+  });
 
-    // Video mic toggle
-    document.getElementById("videoMuteBtn").addEventListener("click", () => {
-        if (localVideoStream) {
-            const track = localVideoStream.getAudioTracks()[0];
-            if (track) {
-                track.enabled = !track.enabled;
-                const icon = document.querySelector("#videoMuteBtn i");
-                if (icon) icon.className = track.enabled ? "fas fa-microphone" : "fas fa-microphone-slash";
-            }
-        }
-    });
+  // Video mic toggle
+  document.getElementById("videoMuteBtn").addEventListener("click", () => {
+    if (localVideoStream) {
+      const track = localVideoStream.getAudioTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        const icon = document.querySelector("#videoMuteBtn i");
+        if (icon) icon.className = track.enabled ? "fas fa-microphone" : "fas fa-microphone-slash";
+      }
+    }
+  });
 
-    // Video camera toggle
-    document.getElementById("videoCamBtn").addEventListener("click", () => {
-        if (localVideoStream) {
-            const track = localVideoStream.getVideoTracks()[0];
-            if (track) {
-                track.enabled = !track.enabled;
-                const icon = document.querySelector("#videoCamBtn i");
-                if (icon) icon.className = track.enabled ? "fas fa-video" : "fas fa-video-slash";
-            }
-        }
-    });
+  // Video camera toggle
+  document.getElementById("videoCameraBtn").addEventListener("click", () => {
+    if (localVideoStream) {
+      const track = localVideoStream.getVideoTracks()[0];
+      if (track) {
+        track.enabled = !track.enabled;
+        const icon = document.querySelector("#videoCameraBtn i");
+        if (icon) icon.className = track.enabled ? "fas fa-video" : "fas fa-video-slash";
+      }
+    }
+  });
 });
 
 // send file to backend, get URL, render link, and notify receiver via WebSocket
 function sendFile(file) {
-    console.log("[DEBUG] sendFile() called with:", file);
-    if (!activeReceiver) {
-      console.error("[DEBUG] No activeReceiver set! Cannot upload file.");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("receiver", activeReceiver);
+  console.log("[DEBUG] sendFile() called with:", file);
+  if (!activeReceiver) {
+    console.error("[DEBUG] No activeReceiver set! Cannot upload file.");
+    return;
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("receiver", activeReceiver);
 
-    console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
+  console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
 
-    fetch("/upload_file", { method: "POST", body: formData })
-        .then(res => {
-            console.log("[DEBUG] Upload response status:", res.status);
-            console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
-            return res.text();  // read raw text first
-        })
-        .then(text => {
-            console.log("[DEBUG] Raw response body:", text);
-            try {
-                const data = JSON.parse(text);
-                console.log("[DEBUG] Parsed JSON:", data);
+  fetch("/upload_file", { method: "POST", body: formData })
+    .then(res => {
+      console.log("[DEBUG] Upload response status:", res.status);
+      console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
+      return res.text();  // read raw text first
+    })
+    .then(text => {
+      console.log("[DEBUG] Raw response body:", text);
+      try {
+        const data = JSON.parse(text);
+        console.log("[DEBUG] Parsed JSON:", data);
 
-                const _fileNode = makeMediaNode('file', data.url, data.url.endsWith('.pdf') ? 'Open PDF' : 'Download file');
-                addMessageToUI("Me", _fileNode, new Date().toISOString());
-                // Send to receiver via WebSocket
-                socket.send(JSON.stringify({
-                    type: "file",
-                    sender: loggedInUser,
-                    receiver: activeReceiver,
-                    url: data.url
-                }));
-            } catch (err) {
-                console.error("[DEBUG] Failed to parse JSON:", err);
-            }
-        })
-        .catch(err => console.error("[DEBUG] Upload error:", err));
+        if (data.type === "security_alert" || data.rule_id) {
+          alert(
+            `Rule: ${data.rule_id}\n` +
+            `Threat Level: ${data.threat_level}\n` +
+            `Risk Score: ${data.risk_score}\n\n` +
+            `${data.message}`
+          );
+          return;
+        }
+
+        if (!data.url) {
+          alert(data.error || "File upload failed.");
+          return;
+        }
+
+        const _fileNode = makeMediaNode('file', data.url, data.url.endsWith('.pdf') ? 'Open PDF' : 'Download file');
+        addMessageToUI("Me", _fileNode, new Date().toISOString());
+        // Send to receiver via WebSocket
+        socket.send(JSON.stringify({
+          type: "file",
+          sender: loggedInUser,
+          receiver: activeReceiver,
+          url: data.url,
+          abnormal_file_detected: data.abnormal_file_detected,
+          dangerous_file_detected: data.dangerous_file_detected,
+          filename: data.filename || file.name
+        }));
+      } catch (err) {
+        console.error("[DEBUG] Failed to parse JSON:", err);
+      }
+    })
+    .catch(err => console.error("[DEBUG] Upload error:", err));
 }
 
 // sendimages. Backend returns URL, we render the image and notify receiver.
 function sendImage(image) {
-    console.log("[DEBUG] sendImage() called with:", image);
-    if (!activeReceiver) {
-      console.error("[DEBUG] No activeReceiver set! Cannot upload image.");
-      return;
-    }
+  console.log("[DEBUG] sendImage() called with:", image);
+  if (!activeReceiver) {
+    console.error("[DEBUG] No activeReceiver set! Cannot upload image.");
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append("image", image);
-    formData.append("receiver", activeReceiver);
+  const formData = new FormData();
+  formData.append("image", image);
+  formData.append("receiver", activeReceiver);
 
-    console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
+  console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
 
-    fetch("/upload_image", { method: "POST", body: formData })
-        .then(res => {
-            console.log("[DEBUG] Upload response status:", res.status);
-            console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
-            return res.text();  // read raw text first
-        })
-        .then(text => {
-            console.log("[DEBUG] Raw response body:", text);
-            try {
-                const data = JSON.parse(text);
-                console.log("[DEBUG] Parsed JSON:", data);
+  fetch("/upload_image", { method: "POST", body: formData })
+    .then(res => {
+      console.log("[DEBUG] Upload response status:", res.status);
+      console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
+      return res.text();  // read raw text first
+    })
+    .then(text => {
+      console.log("[DEBUG] Raw response body:", text);
+      try {
+        const data = JSON.parse(text);
+        console.log("[DEBUG] Parsed JSON:", data);
 
-                // Render immediately for sender (aligned right)
-                addMessageToUI("Me", makeMediaNode('img', data.url), new Date().toISOString());
+        // Render immediately for sender (aligned right)
+        addMessageToUI("Me", makeMediaNode('img', data.url), new Date().toISOString());
 
-                socket.send(JSON.stringify({
-                    type: "image",
-                    sender: loggedInUser,
-                    receiver: activeReceiver,
-                    url: data.url
-                }));
-                console.log("[DEBUG] WebSocket message sent for image:", data.url);
-            } catch (err) {
-                console.error("[DEBUG] Failed to parse JSON:", err);
-            }
-        })
-        .catch(err => console.error("[DEBUG] Upload error:", err));
+        socket.send(JSON.stringify({
+          type: "image",
+          sender: loggedInUser,
+          receiver: activeReceiver,
+          url: data.url
+        }));
+        console.log("[DEBUG] WebSocket message sent for image:", data.url);
+      } catch (err) {
+        console.error("[DEBUG] Failed to parse JSON:", err);
+      }
+    })
+    .catch(err => console.error("[DEBUG] Upload error:", err));
 }
 
 audioBtn.addEventListener("click", () => {
-    if (!isRecording) {
-        startRecording();
-        audioBtn.textContent = "⏹ Stop"; // change icon/text
-    } else {
-        stopRecording();
-        audioBtn.textContent = "🎤 Record"; // reset icon/text
-    }
-    isRecording = !isRecording;
+  if (!isRecording) {
+    startRecording();
+    audioBtn.textContent = "⏹ Stop"; // change icon/text
+  } else {
+    stopRecording();
+    audioBtn.textContent = "🎤 Record"; // reset icon/text
+  }
+  isRecording = !isRecording;
 });
 
 function startRecording() {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-            mediaRecorder = new MediaRecorder(stream);
-            mediaRecorder.start();
-            audioChunks = [];
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.start();
+      audioChunks = [];
 
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
 
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                sendAudio(audioBlob);
-            };
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        sendAudio(audioBlob);
+      };
 
-            // Optional: auto‑stop after 60s max
-            setTimeout(() => {
-                if (isRecording) {
-                    stopRecording();
-                    audioBtn.textContent = "🎤 Record";
-                    isRecording = false;
-                }
-            }, 60000);
-        })
-        .catch(err => console.error("Microphone error:", err));
+      // Optional: auto‑stop after 60s max
+      setTimeout(() => {
+        if (isRecording) {
+          stopRecording();
+          audioBtn.textContent = "🎤 Record";
+          isRecording = false;
+        }
+      }, 60000);
+    })
+    .catch(err => console.error("Microphone error:", err));
 }
 
 function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-    }
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
 }
 
 // Send audio blob to backend, get URL, render audio player, and notify receiver via WebSocket
 function sendAudio(audioBlob) {
-    console.log("[DEBUG] sendAudio() called with:", audioBlob);
-    if (!activeReceiver) {
-        console.error("[DEBUG] No activeReceiver set! Cannot upload audio.");
-        return;
-    }
+  console.log("[DEBUG] sendAudio() called with:", audioBlob);
+  if (!activeReceiver) {
+    console.error("[DEBUG] No activeReceiver set! Cannot upload audio.");
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append("audio", audioBlob, "voiceMessage.webm");
-    formData.append("receiver", activeReceiver);
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "voiceMessage.webm");
+  formData.append("receiver", activeReceiver);
 
-    console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
+  console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
 
-    fetch("/upload_audio", { method: "POST", body: formData })
-        .then(res => {
-            console.log("[DEBUG] Upload response status:", res.status);
-            return res.text();
-        })
-        .then(text => {
-            console.log("[DEBUG] Raw response body:", text);
-            try {
-                const data = JSON.parse(text);
-                console.log("[DEBUG] Parsed JSON:", data);
+  fetch("/upload_audio", { method: "POST", body: formData })
+    .then(res => {
+      console.log("[DEBUG] Upload response status:", res.status);
+      return res.text();
+    })
+    .then(text => {
+      console.log("[DEBUG] Raw response body:", text);
+      try {
+        const data = JSON.parse(text);
+        console.log("[DEBUG] Parsed JSON:", data);
 
-                // Render immediately for sender (aligned right)
-                addMessageToUI("Me", makeMediaNode('audio', data.url), new Date().toISOString());
+        // Render immediately for sender (aligned right)
+        addMessageToUI("Me", makeMediaNode('audio', data.url), new Date().toISOString());
 
-                // Send to receiver via WebSocket
-                socket.send(JSON.stringify({
-                    type: "audio",
-                    sender: loggedInUser,
-                    receiver: activeReceiver,
-                    url: data.url
-                }));
-                console.log("[DEBUG] WebSocket message sent for audio:", data.url);
-            } catch (err) {
-                console.error("[DEBUG] Failed to parse JSON:", err);
-            }
-        })
-        .catch(err => console.error("[DEBUG] Upload error:", err));
+        // Send to receiver via WebSocket
+        socket.send(JSON.stringify({
+          type: "audio",
+          sender: loggedInUser,
+          receiver: activeReceiver,
+          url: data.url
+        }));
+        console.log("[DEBUG] WebSocket message sent for audio:", data.url);
+      } catch (err) {
+        console.error("[DEBUG] Failed to parse JSON:", err);
+      }
+    })
+    .catch(err => console.error("[DEBUG] Upload error:", err));
 }
 
 function updateCallDuration() {
-    const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
-    const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
-    const seconds = String(elapsed % 60).padStart(2, "0");
-    document.getElementById("callDuration").textContent = `${minutes}:${seconds}`;
+  const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+  const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const seconds = String(elapsed % 60).padStart(2, "0");
+  document.getElementById("callDuration").textContent = `${minutes}:${seconds}`;
 }
 
 function updateVideoCallDuration() {
-    const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
-    const h = String(Math.floor(elapsed / 3600)).padStart(2, "0");
-    const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
-    const s = String(elapsed % 60).padStart(2, "0");
-    const meta = document.getElementById("videoCallMeta");
-    if (meta) meta.textContent = `2 participants • ${h}:${m}:${s}`;
+  const elapsed = Math.floor((Date.now() - videoCallStartTime) / 1000);
+  const h = String(Math.floor(elapsed / 3600)).padStart(2, "0");
+  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
+  const s = String(elapsed % 60).padStart(2, "0");
+  const meta = document.getElementById("videoCallMeta");
+  if (meta) meta.textContent = `2 participants • ${h}:${m}:${s}`;
 }
 
 function addRemoteVideoTile(stream, name) {
-    const grid = document.getElementById("remoteVideoGrid");
-    if (!grid) return;
-    if (grid.querySelector('[data-name="' + name + '"]')) return;
-    const tile = document.createElement("div");
-    tile.className = "participant";
-    tile.dataset.name = name;
-    const vid = document.createElement("video");
-    vid.srcObject = stream;
-    vid.autoplay = true;
-    vid.playsInline = true;
-    vid.play().catch(() => {});
-    const label = document.createElement("div");
-    label.className = "name";
-    label.textContent = name;
-    tile.appendChild(vid);
-    tile.appendChild(label);
-    grid.appendChild(tile);
+  const grid = document.getElementById("remoteVideoGrid");
+  if (!grid) return;
+  if (grid.querySelector('[data-name="' + name + '"]')) return;
+  const tile = document.createElement("div");
+  tile.className = "participant";
+  tile.dataset.name = name;
+  const vid = document.createElement("video");
+  vid.srcObject = stream;
+  vid.autoplay = true;
+  vid.playsInline = true;
+  vid.play().catch(() => { });
+  const label = document.createElement("div");
+  label.className = "name";
+  label.textContent = name;
+  tile.appendChild(vid);
+  tile.appendChild(label);
+  grid.appendChild(tile);
 }
 
 function clearVideoCall() {
-    const grid = document.getElementById("remoteVideoGrid");
-    if (grid) grid.innerHTML = "";
-    const localVid = document.getElementById("localVideoEl");
-    if (localVid) localVid.srcObject = null;
+  const grid = document.getElementById("remoteVideoGrid");
+  if (grid) grid.innerHTML = "";
+  const localVid = document.getElementById("localVideoEl");
+  if (localVid) localVid.srcObject = null;
 }
 
 // Audio Call
 async function startAudioCall(receiver) {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    pc = createAudioPeerConnection();
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  pc = createAudioPeerConnection();
 
-    // 🔍 Debug logs
-    pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
-    };
-    pc.oniceconnectionstatechange = () => {
-        console.log("ICE state:", pc.iceConnectionState);
-    };
+  // 🔍 Debug logs
+  pc.onconnectionstatechange = () => {
+    console.log("Connection state:", pc.connectionState);
+  };
+  pc.oniceconnectionstatechange = () => {
+    console.log("ICE state:", pc.iceConnectionState);
+  };
 
-    // Add ICE candidate handler right after creating pc
-    pc.onicecandidate = event => {
-        if (event.candidate) {
-            socket.send(JSON.stringify({
-                type: "ice-candidate",
-                callType: "audio",   // defined calltype
-                sender: loggedInUser,
-                receiver,
-                candidate: event.candidate
-            }));
-        }
-    };
+  // Add ICE candidate handler right after creating pc
+  pc.onicecandidate = event => {
+    if (event.candidate) {
+      socket.send(JSON.stringify({
+        type: "ice-candidate",
+        callType: "audio",   // defined calltype
+        sender: loggedInUser,
+        receiver,
+        candidate: event.candidate
+      }));
+    }
+  };
 
-    // Add local audio
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  // Add local audio
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    // Handle remote audio
-    pc.ontrack = event => {
-        const audioEl = document.createElement("audio");
-        audioEl.srcObject = event.streams[0];
-        audioEl.autoplay = true;
-        document.body.appendChild(audioEl);
-    };
+  // Handle remote audio
+  pc.ontrack = event => {
+    const audioEl = document.createElement("audio");
+    audioEl.srcObject = event.streams[0];
+    audioEl.autoplay = true;
+    document.body.appendChild(audioEl);
+  };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.send(JSON.stringify({ 
-      type:"call-offer", 
-      callType:"audio", // for receiver to know which interface to show
-      sender:loggedInUser, 
-      receiver, 
-      sdp:offer 
-    }));
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.send(JSON.stringify({
+    type: "call-offer",
+    callType: "audio", // for receiver to know which interface to show
+    sender: loggedInUser,
+    receiver,
+    sdp: offer
+  }));
 
-    // Update UI immediately for caller
-    const callUserName = document.getElementById("callUserName");
-    if (callUserName) callUserName.textContent = receiver;
-    const callAvatar = document.getElementById("callAvatar");
-    if (callAvatar) callAvatar.textContent = receiver[0].toUpperCase();
-    document.getElementById("callStatus").textContent = "Calling...";
-    document.getElementById("audioCallInterface").style.display = "flex";
-    document.getElementById("videoCallInterface").style.display = "none";
-    document.getElementById("callOverlay").style.display = "flex";
+  // Update UI immediately for caller
+  const callUserName = document.getElementById("callUserName");
+  if (callUserName) callUserName.textContent = receiver;
+  const callAvatar = document.getElementById("callAvatar");
+  if (callAvatar) callAvatar.textContent = receiver[0].toUpperCase();
+  document.getElementById("callStatus").textContent = "Calling...";
+  document.getElementById("audioCallInterface").style.display = "flex";
+  document.getElementById("videoCallInterface").style.display = "none";
+  document.getElementById("callOverlay").style.display = "flex";
 
-    // Listen for signaling
-    // socket.addEventListener("message", async (event) => {
-    //   const msg = JSON.parse(event.data);
+  // Listen for signaling
+  // socket.addEventListener("message", async (event) => {
+  //   const msg = JSON.parse(event.data);
 
-    //   // Handle call answer for audio
-    //   if (msg.type === "call-answer" && msg.receiver === loggedInUser && msg.callType === "audio") {
-    //     await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-    //     callStartTime = Date.now();
-    //     durationInterval = setInterval(updateCallDuration, 1000);
-    //     document.getElementById("callStatus").textContent = "Connected";
-    //   }
+  //   // Handle call answer for audio
+  //   if (msg.type === "call-answer" && msg.receiver === loggedInUser && msg.callType === "audio") {
+  //     await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+  //     callStartTime = Date.now();
+  //     durationInterval = setInterval(updateCallDuration, 1000);
+  //     document.getElementById("callStatus").textContent = "Connected";
+  //   }
 
-    //   // Handle ICE candidates for audio
-    //   if (msg.type === "ice-candidate" && msg.receiver === loggedInUser && msg.callType === "audio") {
-    //     try {
-    //       await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-    //     } catch (err) {
-    //       console.error("Error adding ICE candidate:", err);
-    //     }
-    //   }
+  //   // Handle ICE candidates for audio
+  //   if (msg.type === "ice-candidate" && msg.receiver === loggedInUser && msg.callType === "audio") {
+  //     try {
+  //       await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+  //     } catch (err) {
+  //       console.error("Error adding ICE candidate:", err);
+  //     }
+  //   }
 
-    //   if (msg.type === "call-end" && msg.receiver === loggedInUser) {
-    //     // Close peer connection
-    //     if (pc) pc.close();
+  //   if (msg.type === "call-end" && msg.receiver === loggedInUser) {
+  //     // Close peer connection
+  //     if (pc) pc.close();
 
-    //     // Clear timer
-    //     clearInterval(durationInterval);
+  //     // Clear timer
+  //     clearInterval(durationInterval);
 
-    //     // Update UI
-    //     document.getElementById("callStatus").textContent = "Call ended";
-    //     document.getElementById("callOverlay").style.display = "none";
-    //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
-    //   }
+  //     // Update UI
+  //     document.getElementById("callStatus").textContent = "Call ended";
+  //     document.getElementById("callOverlay").style.display = "none";
+  //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
+  //   }
 
-    //   if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "audio") {
-    //     if (pc) pc.close();
-    //     clearInterval(durationInterval);
-    //     document.getElementById("callStatus").textContent = "Call ended";
-    //     document.getElementById("callOverlay").style.display = "none";
-    //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
-    //   }
-    // });
+  //   if (msg.type === "call-end" && msg.receiver === loggedInUser && msg.callType === "audio") {
+  //     if (pc) pc.close();
+  //     clearInterval(durationInterval);
+  //     document.getElementById("callStatus").textContent = "Call ended";
+  //     document.getElementById("callOverlay").style.display = "none";
+  //     if(document.getElementById("callUserName")) document.getElementById("callUserName").textContent = "";
+  //   }
+  // });
 }
 
 // Audio call button
 document.getElementById("audioCallBtn").addEventListener("click", () => {
-    console.log("Audio call button clicked");
-    startAudioCall(activeReceiver);
-    document.getElementById("callOverlay").style.display = "flex"; // show overlay
+  console.log("Audio call button clicked");
+  startAudioCall(activeReceiver);
+  document.getElementById("callOverlay").style.display = "flex"; // show overlay
 });
 
 document.getElementById("hangupBtn").onclick = () => {
-    if (pc) { pc.close(); pc = null; }
-    clearInterval(durationInterval);
-    const elapsed = callStartTime ? Math.max(0, Math.floor((Date.now() - callStartTime) / 1000)) : 0;
-    callStartTime = null;
-    socket.send(JSON.stringify({
-      type: "call-end",
-      callType: "audio",
-      sender: loggedInUser,
-      receiver: activeReceiver,
-      status: "ended",
-      duration: elapsed
-    }));
-    if (elapsed > 0) {
-      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-      const ss = String(elapsed % 60).padStart(2, "0");
-      addCallLogToUI(`📞 Call ended • ${mm}:${ss}`);
-    }
-    document.getElementById("audioCallInterface").style.display = "none";
-    document.getElementById("callOverlay").style.display = "none";
+  if (pc) { pc.close(); pc = null; }
+  clearInterval(durationInterval);
+  const elapsed = callStartTime ? Math.max(0, Math.floor((Date.now() - callStartTime) / 1000)) : 0;
+  callStartTime = null;
+  socket.send(JSON.stringify({
+    type: "call-end",
+    callType: "audio",
+    sender: loggedInUser,
+    receiver: activeReceiver,
+    status: "ended",
+    duration: elapsed
+  }));
+  if (elapsed > 0) {
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    addCallLogToUI(`📞 Call ended • ${mm}:${ss}`);
+  }
+  document.getElementById("audioCallInterface").style.display = "none";
+  document.getElementById("callOverlay").style.display = "none";
 };
 
 // Video Call
@@ -1152,7 +1252,7 @@ socket.addEventListener("message", async (event) => {
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
       for (const c of pendingAudioCandidates) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) { }
       }
       pendingAudioCandidates = [];
       callStartTime = Date.now();
@@ -1165,7 +1265,7 @@ socket.addEventListener("message", async (event) => {
     if (!pc || !pc.remoteDescription) {
       pendingAudioCandidates.push(msg.candidate);
     } else {
-      try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+      try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) { }
     }
   }
 
@@ -1186,7 +1286,7 @@ socket.addEventListener("message", async (event) => {
     try {
       await videoPc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
       for (const c of pendingVideoCandidates) {
-        try { await videoPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        try { await videoPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) { }
       }
       pendingVideoCandidates = [];
       videoCallStartTime = Date.now();
@@ -1199,7 +1299,7 @@ socket.addEventListener("message", async (event) => {
     if (!videoPc || !videoPc.remoteDescription) {
       pendingVideoCandidates.push(msg.candidate);
     } else {
-      try { await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+      try { await videoPc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) { }
     }
   }
 
@@ -1245,8 +1345,8 @@ document.getElementById("videoHangupBtn").onclick = () => {
 
 //video call button
 document.getElementById("videoCallBtn").addEventListener("click", () => {
-    if (!activeReceiver) return;
-    startVideoCall(activeReceiver);
+  if (!activeReceiver) return;
+  startVideoCall(activeReceiver);
 });
 
 
