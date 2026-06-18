@@ -40,3 +40,6 @@ Thumbs.db
 
 # Local dev secret key (auto-generated, do not commit)
 .secret_key
+
+__pycache__/
+*.pyc
