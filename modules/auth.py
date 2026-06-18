@@ -1,22 +1,35 @@
 from modules.database import get_db
-from modules.threat_detection import log_event
-import hashlib, hmac, os
+
+from modules.threat_detection import (
+    log_event,
+    check_failed_login,
+    check_successful_login,
+    record_event_for_intelligence,
+    response_decision
+)
+import hashlib
+import hmac
+import os
 
 # Decide placeholder style based on environment
 ph = "%s" if os.environ.get("DATABASE_URL") else "?"
+
 
 def hash_password(password):
     salt = os.urandom(16)
     h = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 200000)
     return salt.hex() + ':' + h.hex()
 
+
 def verify_password(stored, provided):
     try:
         salt_hex, hash_hex = stored.split(':', 1)
-        h = hashlib.pbkdf2_hmac('sha256', provided.encode(), bytes.fromhex(salt_hex), 200000)
+        h = hashlib.pbkdf2_hmac(
+            'sha256', provided.encode(), bytes.fromhex(salt_hex), 200000)
         return hmac.compare_digest(h.hex(), hash_hex)
     except Exception:
         return False
+
 
 def register_user(username, password):
     conn = get_db()
@@ -59,6 +72,7 @@ def register_user(username, password):
         conn.close()
         return "Registration error"
 
+
 def login_user(username, password):
     conn = get_db()
     cur = conn.cursor()
@@ -83,8 +97,16 @@ def login_user(username, password):
         return "Account is blocked due to multiple failed login attempts"
 
     if not verify_password(db_password, password):
+
+        detection = check_failed_login(username)
+        intel = record_event_for_intelligence(username, detection)
+        decision = response_decision(intel)
+
+        print("LOGIN INTELLIGENCE:", intel)
+        print("RESPONSE DECISION:", decision)
+
         attempts += 1
-        if attempts >= 5:
+        if attempts >= 10:
             cur.execute(
                 f"UPDATE users SET failed_attempts={ph}, is_blocked=1 WHERE username={ph}",
                 (attempts, username)
@@ -94,13 +116,14 @@ def login_user(username, password):
             conn.close()
             return "Account blocked due to too many failed attempts"
 
-        remaining = 5 - attempts
+        remaining = 10 - attempts
         cur.execute(
             f"UPDATE users SET failed_attempts={ph} WHERE username={ph}",
             (attempts, username)
         )
         conn.commit()
-        log_event(username, "LOGIN_FAIL", f"Wrong password ({attempts} attempts)")
+        log_event(username, "LOGIN_FAIL",
+                  f"Wrong password ({attempts} attempts)")
         conn.close()
 
         if attempts >= 3:
@@ -114,5 +137,11 @@ def login_user(username, password):
     )
     conn.commit()
     log_event(username, "LOGIN_SUCCESS", "User logged in")
+    detection = check_successful_login(username)
+    intel = record_event_for_intelligence(username, detection)
+    decision = response_decision(intel)
+
+    print("LOGIN SUCCESS INTELLIGENCE:", intel)
+    print("RESPONSE DECISION:", decision)
     conn.close()
     return "success"
