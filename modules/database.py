@@ -330,7 +330,7 @@ def init_db():
         # logs table
         cur.execute('''
         CREATE TABLE IF NOT EXISTS logs (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT,
             event_type TEXT,
             description TEXT,

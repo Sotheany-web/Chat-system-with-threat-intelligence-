@@ -42,7 +42,12 @@ async function generateAESKey(otherUser) {
     }
 }
 
-async function encryptMessage(plaintext) {
+// async function encryptMessage(plaintext) {
+async function encryptMessage(plaintext, otherUser = null) {
+    if (otherUser && !_aesKeyMap[otherUser]) {
+        await generateAESKey(otherUser);
+    }
+
     if (!aesKey) throw new Error("AES key not initialized — call generateAESKey first");
 
     const data = new TextEncoder().encode(plaintext);

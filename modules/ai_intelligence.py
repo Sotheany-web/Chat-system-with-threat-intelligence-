@@ -15,7 +15,7 @@ if joblib:
         model = joblib.load(MODEL_PATH)
         print("[DEBUG] Threat model loaded successfully.")
     except Exception as e:
-        print("[DEBUG] Threat model not found. Using rule-based fallback:", e)
+        print(e)
 else:
     print("[DEBUG] joblib not installed. Using rule-based fallback.")
 

@@ -721,12 +721,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Video camera toggle
-    document.getElementById("videoCamBtn").addEventListener("click", () => {
+    document.getElementById("videoCameraBtn").addEventListener("click", () => {
         if (localVideoStream) {
             const track = localVideoStream.getVideoTracks()[0];
             if (track) {
                 track.enabled = !track.enabled;
-                const icon = document.querySelector("#videoCamBtn i");
+                const icon = document.querySelector("#videoCameraBtn i");
                 if (icon) icon.className = track.enabled ? "fas fa-video" : "fas fa-video-slash";
             }
         }

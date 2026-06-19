@@ -1,4 +1,5 @@
-from modules.database import get_db
+from modules.database import get_db, save_threat_log
+from modules.ai_intelligence import predict_threat
 
 from modules.threat_detection import (
     log_event,
@@ -100,6 +101,24 @@ def login_user(username, password):
 
         detection = check_failed_login(username)
         intel = record_event_for_intelligence(username, detection)
+        ai_prediction = predict_threat(
+            failed_logins=attempts + 1,
+            messages=0,
+            sql_injection=0,
+            dangerous_file=0
+        )
+
+        save_threat_log(
+            username=username,
+            event_type="LOGIN_FAIL_CHECK",
+            description=detection.message,
+            rule_triggered=detection.rule_id,
+            risk_score=intel["risk_score"],
+            threat_level=intel["threat_level"],
+            ai_prediction=ai_prediction,
+            status=detection.status
+        )
+
         decision = response_decision(intel)
 
         print("LOGIN INTELLIGENCE:", intel)
@@ -139,6 +158,24 @@ def login_user(username, password):
     log_event(username, "LOGIN_SUCCESS", "User logged in")
     detection = check_successful_login(username)
     intel = record_event_for_intelligence(username, detection)
+    ai_prediction = predict_threat(
+        failed_logins=0,
+        messages=0,
+        sql_injection=0,
+        dangerous_file=0
+    )
+
+    save_threat_log(
+        username=username,
+        event_type="LOGIN_SUCCESS_CHECK",
+        description=detection.message,
+        rule_triggered=detection.rule_id,
+        risk_score=intel["risk_score"],
+        threat_level=intel["threat_level"],
+        ai_prediction=ai_prediction,
+        status=detection.status
+    )
+
     decision = response_decision(intel)
 
     print("LOGIN SUCCESS INTELLIGENCE:", intel)

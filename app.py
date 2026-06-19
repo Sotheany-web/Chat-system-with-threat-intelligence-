@@ -6,7 +6,7 @@ import json
 from modules.database import init_db, get_db
 # from secure_chat.modules.database import init_db, get_db
 from modules.auth import register_user, login_user
-from modules.database import get_all_users, save_message, get_chat_history
+from modules.database import get_all_users, save_message, save_file_message, get_chat_history
 
 from modules.ai_intelligence import predict_threat
 
@@ -40,7 +40,7 @@ from werkzeug.utils import secure_filename
 from supabase import create_client, Client
 import os
 
-
+from datetime import datetime
 import secrets as _secrets
 
 app = Flask(__name__)
@@ -300,6 +300,59 @@ def websocket(ws):
 
             receiver = msg.get("receiver")
 
+            # Forward uploaded files/images/audio to receiver
+            if msg.get("type") in ["file", "image", "audio"]:
+                receiver = msg.get("receiver")
+
+            if msg.get("type") in ["file", "image", "audio"]:
+                receiver = msg.get("receiver")
+
+                payload = json.dumps({
+                    "type": msg.get("type"),
+                    "sender": username,
+                    "receiver": receiver,
+                    "url": msg.get("url"),
+                    "filename": msg.get("filename"),
+                    "abnormal_file_detected": msg.get("abnormal_file_detected", False),
+                    "dangerous_file_detected": msg.get("dangerous_file_detected", False),
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+
+                print(
+                    f"[DEBUG] Forwarding media: {msg.get('type')} from {username} to {receiver}")
+                print("[DEBUG] Active connections:", list(connections.keys()))
+
+                if receiver in connections:
+                    connections[receiver].send(payload)
+                    print("[DEBUG] Media forwarded to receiver")
+                else:
+                    print("[DEBUG] Receiver not connected")
+
+                    continue
+
+                payload = json.dumps({
+                    "type": msg.get("type"),
+                    "sender": username,
+                    "receiver": receiver,
+                    "url": msg.get("url"),
+                    "filename": msg.get("filename"),
+                    "abnormal_file_detected": msg.get("abnormal_file_detected", False),
+                    "dangerous_file_detected": msg.get("dangerous_file_detected", False),
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+
+                print("[DEBUG] Forwarding media:", msg.get(
+                    "type"), "from", username, "to", receiver)
+                print("[DEBUG] Active connections:", list(connections.keys()))
+
+                if receiver in connections:
+                    connections[receiver].send(payload)
+                    print("[DEBUG] Media forwarded to receiver")
+                else:
+                    print("[DEBUG] Receiver not connected")
+
+                continue
+
             # --- Handle encrypted text messages ---
             if "ciphertext" in msg and "nonce" in msg:
                 ciphertext = msg.get("ciphertext")
@@ -421,49 +474,43 @@ def websocket(ws):
                         print(
                             f"[DEBUG] Failed to send text message to {receiver}: {e}")
 
-            # # --- Handle file/image messages ---
-            # elif msg.get("type") in ["file", "image"]:
-            #     print(f"[DEBUG] Received {msg['type']} message from {username}: {msg}")
+            # --- Handle file/image messages from frontend ---
+            elif msg.get("type") in ["file", "image"]:
+                print(
+                    f"[DEBUG] Received {msg.get('type')} message from {username}: {msg}")
 
-            #     if not receiver or not msg.get("url"):
-            #         print(f"[DEBUG] Invalid {msg['type']} message from {username} — missing receiver or url")
-            #         continue
+                receiver = msg.get("receiver")
+                url = msg.get("url")
+                filename = msg.get("filename") or os.path.basename(
+                    urlparse(url).path)
 
-            #     # Extract just the filename from the URL
-            #     filename = os.path.basename(urlparse(msg["url"]).path)
+                if not receiver or not url:
+                    print(
+                        f"[DEBUG] Invalid {msg.get('type')} message from {username}")
+                    continue
 
-            #     payload = json.dumps({
-            #         "sender": username,
-            #         "receiver": receiver,
-            #         "type": msg["type"],
-            #         "url": url_for("uploaded_file", filename=filename),  # full URL for frontend
-            #         "timestamp": datetime.now().isoformat()
-            #     })
-            #     print(f"[DEBUG] Prepared payload for {msg['type']} message: {payload}")
+                payload = json.dumps({
+                    "type": msg.get("type"),
+                    "sender": username,
+                    "receiver": receiver,
+                    "url": url,
+                    "filename": filename,
+                    "dangerous_file_detected": bool(msg.get("dangerous_file_detected", False)),
+                    "abnormal_file_detected": bool(msg.get("abnormal_file_detected", False)),
+                    "timestamp": datetime.now().isoformat()
+                })
 
-            #     try:
-            #         new_message = Message(
-            #             sender=username,
-            #             receiver=receiver,
-            #             file_name=filename,   # only filename stored in DB
-            #             msg_type=msg["type"],
-            #             timestamp=datetime.utcnow()
-            #         )
-            #         db.session.add(new_message)
-            #         db.session.commit()
-            #         print(f"[DEBUG] Saved {msg['type']} message in DB for {username} -> {receiver}")
-            #     except Exception as e:
-            #         db.session.rollback()
-            #         print(f"[DEBUG] Failed to save {msg['type']} message in DB: {e}")
-
-            #     if receiver in connections:
-            #         try:
-            #             connections[receiver].send(payload)
-            #             print(f"[DEBUG] Forwarded {msg['type']} message from {username} to {receiver}")
-            #         except Exception as e:
-            #             print(f"[DEBUG] Failed to forward {msg['type']} message to {receiver}: {e}")
-            #     else:
-            #         print(f"[DEBUG] Receiver {receiver} not connected, cannot forward {msg['type']} message")
+                if receiver in connections:
+                    try:
+                        connections[receiver].send(payload)
+                        print(
+                            f"[DEBUG] Forwarded {msg.get('type')} from {username} to {receiver}")
+                    except Exception as e:
+                        print(
+                            f"[DEBUG] Failed to forward {msg.get('type')} to {receiver}: {e}")
+                else:
+                    print(
+                        f"[DEBUG] Receiver {receiver} not connected. Message saved only.")
 
             # --- Handle call signaling ---
             elif msg.get("type") in ["call-offer", "call-answer", "ice-candidate", "call-end", "call-missed"]:
@@ -819,6 +866,7 @@ def upload_file():
 
         db.session.add(new_message)
         db.session.commit()
+        message_timestamp = datetime.utcnow().isoformat() + "Z"
 
         payload = json.dumps({
             "type": "file",
@@ -828,18 +876,42 @@ def upload_file():
             "filename": unique_name,
             "dangerous_file_detected": file_result.rule_id == "R7",
             "abnormal_file_detected": file_result.rule_id == "R5",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": message_timestamp
         })
 
-        if receiver in connections:
-            connections[receiver].send(payload)
+        # if receiver in connections:
+        #     connections[receiver].send(payload)
 
+        # print("[DEBUG] receiver:", receiver)
+        # print("[DEBUG] active connections:", list(connections.keys()))
+        # print("[DEBUG] receiver online?", receiver in connections)
+
+        # if receiver in connections:
+        #     connections[receiver].send(payload)
+        #     print("[DEBUG] File sent to receiver")
+        # else:
+        #     print("[DEBUG] Receiver not connected, file saved only")
+
+        # print("[DEBUG] receiver:", receiver)
+        print("[DEBUG] active connections:", list(connections.keys()))
+        print("[DEBUG] receiver online?", receiver in connections)
+        print("[DEBUG] File uploaded. chat.js will forward it through WebSocket.")
+
+        # if receiver in connections:
+        #     try:
+        #         connections[receiver].send(payload)
+        #         print("[DEBUG] File sent to receiver")
+        #     except Exception as e:
+        #         print("[DEBUG] Failed to send file to receiver:", e)
+        # else:
+        #     print("[DEBUG] Receiver not connected, file saved only")
+
+        timestamp = datetime.utcnow().isoformat()
         return jsonify({
             "status": "success",
             "url": url,
             "filename": unique_name,
-            "dangerous_file_detected": file_result.rule_id == "R7",
-            "abnormal_file_detected": file_result.rule_id == "R5"
+            "timestamp": timestamp
         }), 201
 
     except Exception as e:
@@ -868,13 +940,16 @@ def upload_image():
         image = request.files["image"]
         receiver = request.form.get("receiver")
         print("[DEBUG] Receiver value:", receiver)
+
         if not receiver:
             return jsonify({"error": "Missing receiver"}), 400
 
         filename = secure_filename(image.filename)
         ext = os.path.splitext(filename)[1].lower() or ".jpg"
+
         if ext not in ALLOWED_EXTENSIONS:
             return jsonify({"error": "Unsupported file type"}), 400
+
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         unique_name = f"{session['user']}_{timestamp}{ext}"
 
@@ -897,8 +972,37 @@ def upload_image():
         )
         db.session.add(new_message)
         db.session.commit()
+        message_timestamp = datetime.utcnow().isoformat() + "Z"
 
-        return jsonify({"status": "success", "url": url}), 201
+        payload = json.dumps({
+            "type": "image",
+            "sender": session["user"],
+            "receiver": receiver,
+            "url": url,
+            "filename": unique_name,
+            "timestamp": message_timestamp
+        })
+
+        # print("[DEBUG] receiver:", receiver)
+        print("[DEBUG] active connections:", list(connections.keys()))
+        print("[DEBUG] receiver online?", receiver in connections)
+        print("[DEBUG] Image uploaded. chat.js will forward it through WebSocket.")
+
+        # if receiver in connections:
+        #     try:
+        #         connections[receiver].send(payload)
+        #         print("[DEBUG] Image sent to receiver")
+        #     except Exception as e:
+        #         print("[DEBUG] Failed to send image to receiver:", e)
+        # else:
+        #     print("[DEBUG] Receiver not connected, image saved only")
+
+        return jsonify({
+            "status": "success",
+            "url": url,
+            "filename": unique_name,
+            "timestamp": message_timestamp
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -957,6 +1061,7 @@ def upload_audio():
 
         db.session.add(new_message)
         db.session.commit()
+        message_timestamp = datetime.utcnow().isoformat() + "Z"
         print("[DEBUG] Audio message stored in DB")
 
         # Optional: broadcast to receiver only
@@ -964,8 +1069,9 @@ def upload_audio():
             "sender": session["user"],
             "receiver": receiver,
             "url": url,
+            "filename": unique_name,
             "type": "audio",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": message_timestamp
         })
         if receiver in connections:
             try:
@@ -974,7 +1080,12 @@ def upload_audio():
                 print(
                     f"[DEBUG] Failed to forward audio message to {receiver}: {e}")
 
-        return jsonify({"status": "success", "url": url}), 201
+        return jsonify({
+            "status": "success",
+            "url": url,
+            "filename": unique_name,
+            "timestamp": message_timestamp
+        }), 201
 
     except Exception as e:
         db.session.rollback()
@@ -1033,6 +1144,129 @@ def debug_messages():
         })
 
     return {"messages": messages}
+
+
+@app.route("/admin/logs")
+def admin_logs():
+    logs = get_security_logs()
+    return render_template("admin_logs.html", logs=logs)
+
+
+@app.route("/admin/alerts")
+def admin_alerts():
+    alerts = get_admin_alerts()
+    return render_template("admin_alerts.html", alerts=alerts)
+
+
+@app.route("/admin/intelligence")
+def admin_intelligence():
+    logs = get_security_logs()
+    users = {}
+
+    def generate_findings(rules):
+        findings = []
+
+        if "R1" in rules and "R2" in rules:
+            findings.append(
+                "Possible account takeover: failed login followed by successful login.")
+
+        if "R1" in rules and "R3" in rules:
+            findings.append(
+                "Possible brute force attack: repeated failed login caused account lock.")
+
+        if "R4" in rules and "R5" in rules:
+            findings.append(
+                "Possible spam abuse: many messages and many files.")
+
+        if "R4" in rules and "R6" in rules:
+            findings.append(
+                "Possible automated attack: spam behavior combined with SQL-like payload.")
+
+        if "R5" in rules and "R7" in rules:
+            findings.append(
+                "Possible unsafe file sharing: abnormal upload plus high-risk file type.")
+
+        if "R2" in rules and "R7" in rules:
+            findings.append(
+                "Possible compromised account: suspicious login followed by high-risk file upload.")
+
+        if not findings:
+            findings.append(
+                "No strong correlation pattern yet. Monitoring continues.")
+
+        return findings
+
+    for log in logs:
+        username = log[0]
+        rule = log[2]
+        risk_score = int(log[4] or 0)
+        ai_prediction = log[6] or "UNKNOWN"
+
+        if username not in users:
+            users[username] = {
+                "rules": set(),
+                "risk_score": 0,
+                "trend_score": 0,
+                "event_count": 0,
+                "latest_ai": ai_prediction,
+            }
+
+        if rule:
+            users[username]["rules"].add(str(rule))
+
+        users[username]["risk_score"] = min(
+            100, max(users[username]["risk_score"], risk_score))
+        users[username]["trend_score"] += risk_score
+        users[username]["event_count"] += 1
+        users[username]["latest_ai"] = ai_prediction
+
+    for username, data in users.items():
+        final_score = data["risk_score"]
+        trend_score = data["trend_score"]
+        event_count = data["event_count"]
+
+        if trend_score >= 500 or event_count >= 100:
+            data["threat_level"] = "CRITICAL"
+            data["final_decision"] = "TEMP_LOCK"
+        elif final_score >= 80:
+            data["threat_level"] = "HIGH"
+            data["final_decision"] = "ADMIN_REVIEW"
+        elif final_score >= 40:
+            data["threat_level"] = "MEDIUM"
+            data["final_decision"] = "RATE_LIMIT"
+        elif final_score >= 20:
+            data["threat_level"] = "LOW"
+            data["final_decision"] = "WARN"
+        else:
+            data["threat_level"] = "NORMAL"
+            data["final_decision"] = "ALLOW"
+
+        data["findings"] = generate_findings(data["rules"])
+
+        if event_count >= 100:
+            data["findings"].append(
+                "Persistent attacker behavior detected. Extremely high number of suspicious events."
+            )
+
+    return render_template("admin_intelligence.html", users=users)
+
+
+@app.route("/admin/block/<username>", methods=["POST"])
+def admin_block_user(username):
+    conn = get_db()
+    cur = conn.cursor()
+
+    ph = "%s" if os.environ.get("DATABASE_URL") else "?"
+
+    cur.execute(
+        f"UPDATE users SET is_blocked=1 WHERE username={ph}",
+        (username,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("admin_intelligence"))
 
 
 # ---------------- STARTUP ----------------

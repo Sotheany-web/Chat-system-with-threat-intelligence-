@@ -87,37 +87,65 @@ socket.onmessage = async (event) => {
   try {
     const msg = JSON.parse(event.data);
 
+    //----User sees auto response----
+    if (msg.type === "security_alert") {
+      const details = [
+        msg.rule_id ? `Rule: ${msg.rule_id}` : null,
+        msg.threat_level ? `Threat Level: ${msg.threat_level}` : null,
+        msg.risk_score !== undefined ? `Risk Score: ${msg.risk_score}` : null,
+        msg.ai_prediction ? `AI Prediction: ${msg.ai_prediction}` : null
+      ].filter(Boolean).join("\n");
+
+      alert(`${msg.message || "Security alert"}${details ? "\n\n" + details : ""}`);
+      addMessageToUI("System", `⚠️ ${msg.message || "Security alert"}`, new Date().toISOString());
+      return;
+    }
+
     // if (msg.type === "file" || msg.type === "image") {
-    //   const _imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
-    //   const _who = msg.sender === loggedInUser ? "Me" : msg.sender;
-    //   if (msg.type === "image") {
-    //     addMessageToUI(_who, makeMediaNode('img', msg.url), null);
-    //   } else {
-    //     const _ext = (msg.url || "").split(".").pop().split("?")[0].toLowerCase();
-    //     if (_imgExts.includes(_ext)) {
-    //       addMessageToUI(_who, makeMediaNode('img', msg.url), null);
-    //     } else {
-    //       addMessageToUI(_who, makeMediaNode('file', msg.url), null);
-    //     }
+    //   const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+
+    //   let warning = "";
+
+    //   if (msg.dangerous_file_detected) {
+    //     warning = `⚠️ High-risk file detected: ${msg.filename || "unknown file"}\nThis file type may be dangerous.\n\n`;
+    //   } else if (msg.abnormal_file_detected) {
+    //     warning = "⚠️ Security notice: abnormal file upload activity detected.\n\n";
     //   }
+
+    //   if (msg.type === "image") {
+    //     addMessageToUI(who, makeMediaNode("img", msg.url), msg.timestamp);
+    //   } else {
+    //     const fileNode = makeMediaNode("file", msg.url, warning + (msg.filename || "Download file"));
+    //     addMessageToUI(who, fileNode, msg.timestamp);
+    //   }
+
     //   return;
     // }
 
     if (msg.type === "file" || msg.type === "image") {
+      console.log("[DEBUG] RECEIVED MEDIA:", msg);
+
       const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+      const fileUrl = msg.url || (msg.filename ? "/uploads/" + msg.filename : null);
 
-      let warning = "";
-
-      if (msg.dangerous_file_detected) {
-        warning = `⚠️ High-risk file detected: ${msg.filename || "unknown file"}\nThis file type may be dangerous.\n\n`;
-      } else if (msg.abnormal_file_detected) {
-        warning = "⚠️ Security notice: abnormal file upload activity detected.\n\n";
+      if (!fileUrl) {
+        console.error("[DEBUG] Missing media URL:", msg);
+        return;
       }
 
       if (msg.type === "image") {
-        addMessageToUI(who, makeMediaNode("img", msg.url), msg.timestamp);
+        const img = document.createElement("img");
+        img.src = fileUrl;
+        img.style.maxWidth = "200px";
+        img.style.borderRadius = "12px";
+        addMessageToUI(who, img, msg.timestamp);
       } else {
-        const fileNode = makeMediaNode("file", msg.url, warning + (msg.filename || "Download file"));
+        const fileNode = document.createElement("a");
+        fileNode.href = fileUrl;
+        fileNode.target = "_blank";
+        fileNode.rel = "noopener noreferrer";
+        fileNode.textContent = "📎 " + (msg.filename || "Download file");
+
         addMessageToUI(who, fileNode, msg.timestamp);
       }
 
@@ -125,11 +153,17 @@ socket.onmessage = async (event) => {
     }
 
     // Add audio handling here
+    // if (msg.type === "audio") {
+    //   const audio = document.createElement("audio");
+    //   audio.controls = true;
+    //   audio.src = msg.url;
+    //   document.getElementById("chatMessages").appendChild(audio);
+    //   return;
+    // }
+
     if (msg.type === "audio") {
-      const audio = document.createElement("audio");
-      audio.controls = true;
-      audio.src = msg.url;
-      document.getElementById("chatMessages").appendChild(audio);
+      const who = msg.sender === loggedInUser ? "Me" : msg.sender;
+      addMessageToUI(who, makeMediaNode("audio", msg.url), msg.timestamp);
       return;
     }
 
@@ -439,10 +473,12 @@ async function loadChatHistory(user) {
         const imgExts = ["jpg", "jpeg", "png", "gif", "webp"];
         const ext = (msg.file_name || "").split(".").pop().toLowerCase();
         if (imgExts.includes(ext)) {
-          addMessageToUI(who, makeMediaNode('img', '/uploads/' + msg.file_name), msg.timestamp);
+          // addMessageToUI(who, makeMediaNode('img', '/uploads/' + msg.file_name), msg.timestamp);
+          addMessageToUI(who, makeMediaNode('file', '/uploads/' + msg.file_name, msg.file_name), msg.timestamp);
           lastPreview = "Photo";
         } else {
-          addMessageToUI(who, makeMediaNode('file', '/uploads/' + msg.file_name), msg.timestamp);
+          // addMessageToUI(who, makeMediaNode('file', '/uploads/' + msg.file_name), msg.timestamp);
+          addMessageToUI(who, makeMediaNode('file', '/uploads/' + msg.file_name, msg.file_name), msg.timestamp);
           lastPreview = "File";
         }
 
@@ -652,7 +688,6 @@ document.getElementById("sendButton").addEventListener("click", async () => {
         });
       }
 
-
       // Encrypt with AES before sending
       const { ciphertext, nonce } = await encryptMessage(message, activeReceiver);
 
@@ -664,7 +699,7 @@ document.getElementById("sendButton").addEventListener("click", async () => {
       }));
 
       // Show plaintext locally with current time
-      addMessageToUI("Me", message, new Date().toISOString());
+      // addMessageToUI("Me", message, new Date().toISOString());
       input.value = "";
     } catch (err) {
       console.error("[DEBUG] Failed to send message:", err);
@@ -875,17 +910,19 @@ function sendFile(file) {
           return;
         }
 
-        const _fileNode = makeMediaNode('file', data.url, data.url.endsWith('.pdf') ? 'Open PDF' : 'Download file');
-        addMessageToUI("Me", _fileNode, new Date().toISOString());
+        const fileNode = makeMediaNode('file', data.url, data.filename || file.name);
+        addMessageToUI("Me", fileNode, data.timestamp || new Date().toISOString());
+
         // Send to receiver via WebSocket
         socket.send(JSON.stringify({
           type: "file",
           sender: loggedInUser,
           receiver: activeReceiver,
           url: data.url,
-          abnormal_file_detected: data.abnormal_file_detected,
-          dangerous_file_detected: data.dangerous_file_detected,
-          filename: data.filename || file.name
+          filename: data.filename || file.name,
+          abnormal_file_detected: data.abnormal_file_detected || false,
+          dangerous_file_detected: data.dangerous_file_detected || false,
+          timestamp: data.timestamp || new Date().toISOString()
         }));
       } catch (err) {
         console.error("[DEBUG] Failed to parse JSON:", err);
@@ -895,10 +932,69 @@ function sendFile(file) {
 }
 
 // sendimages. Backend returns URL, we render the image and notify receiver.
+// function sendImage(image) {
+//   console.log("[DEBUG] sendImage() called with:", image);
+//   if (!activeReceiver) {
+//     console.error("[DEBUG] No activeReceiver set! Cannot upload image.");
+//     return;
+//   }
+
+//   const formData = new FormData();
+//   formData.append("image", image);
+//   formData.append("receiver", activeReceiver);
+
+//   console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
+
+//   fetch("/upload_image", { method: "POST", body: formData })
+//     .then(res => {
+//       console.log("[DEBUG] Upload response status:", res.status);
+//       console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
+//       return res.text();  // read raw text first
+//     })
+//     .then(text => {
+//       console.log("[DEBUG] Raw response body:", text);
+//       try {
+//         const data = JSON.parse(text);
+//         console.log("[DEBUG] Parsed JSON:", data);
+
+//         // Render immediately for sender (aligned right)
+//         // addMessageToUI("Me", makeMediaNode('img', data.url), new Date().toISOString());
+//         addMessageToUI("Me", makeMediaNode('img', data.url), data.timestamp || new Date().toISOString());
+
+//         socket.send(JSON.stringify({
+//           type: "image",
+//           sender: loggedInUser,
+//           receiver: activeReceiver,
+//           url: data.url,
+//           filename: data.filename || image.name,
+//           abnormal_file_detected: data.abnormal_file_detected || false,
+//           dangerous_file_detected: data.dangerous_file_detected || false,
+//           timestamp: data.timestamp || new Date().toISOString()
+//         }));
+//         console.log("[DEBUG] WebSocket message sent for image:", data.url);
+//       } catch (err) {
+//         console.error("[DEBUG] Failed to parse JSON:", err);
+//       }
+//     })
+//     .catch(err => console.error("[DEBUG] Upload error:", err));
+// }
+
+// audioBtn.addEventListener("click", () => {
+//   if (!isRecording) {
+//     startRecording();
+//     audioBtn.textContent = "⏹ Stop"; // change icon/text
+//   } else {
+//     stopRecording();
+//     audioBtn.textContent = "🎤 Record"; // reset icon/text
+//   }
+//   isRecording = !isRecording;
+// });
+
 function sendImage(image) {
   console.log("[DEBUG] sendImage() called with:", image);
+
   if (!activeReceiver) {
-    console.error("[DEBUG] No activeReceiver set! Cannot upload image.");
+    alert("Please select a receiver first.");
     return;
   }
 
@@ -906,47 +1002,37 @@ function sendImage(image) {
   formData.append("image", image);
   formData.append("receiver", activeReceiver);
 
-  console.log("[DEBUG] FormData prepared. Receiver:", activeReceiver);
-
   fetch("/upload_image", { method: "POST", body: formData })
-    .then(res => {
-      console.log("[DEBUG] Upload response status:", res.status);
-      console.log("[DEBUG] Upload response headers:", [...res.headers.entries()]);
-      return res.text();  // read raw text first
-    })
-    .then(text => {
-      console.log("[DEBUG] Raw response body:", text);
-      try {
-        const data = JSON.parse(text);
-        console.log("[DEBUG] Parsed JSON:", data);
+    .then(res => res.json())
+    .then(data => {
+      console.log("[DEBUG] Image upload response:", data);
 
-        // Render immediately for sender (aligned right)
-        addMessageToUI("Me", makeMediaNode('img', data.url), new Date().toISOString());
-
-        socket.send(JSON.stringify({
-          type: "image",
-          sender: loggedInUser,
-          receiver: activeReceiver,
-          url: data.url
-        }));
-        console.log("[DEBUG] WebSocket message sent for image:", data.url);
-      } catch (err) {
-        console.error("[DEBUG] Failed to parse JSON:", err);
+      if (!data.url) {
+        alert(data.error || "Image upload failed.");
+        return;
       }
-    })
-    .catch(err => console.error("[DEBUG] Upload error:", err));
-}
 
-audioBtn.addEventListener("click", () => {
-  if (!isRecording) {
-    startRecording();
-    audioBtn.textContent = "⏹ Stop"; // change icon/text
-  } else {
-    stopRecording();
-    audioBtn.textContent = "🎤 Record"; // reset icon/text
-  }
-  isRecording = !isRecording;
-});
+      addMessageToUI(
+        "Me",
+        makeMediaNode("img", data.url),
+        data.timestamp || new Date().toISOString()
+      );
+
+      socket.send(JSON.stringify({
+        type: "image",
+        receiver: activeReceiver,
+        url: data.url,
+        filename: data.filename || image.name,
+        timestamp: data.timestamp || new Date().toISOString()
+      }));
+
+      console.log("[DEBUG] Image WebSocket sent to receiver:", activeReceiver);
+    })
+    .catch(err => {
+      console.error("[DEBUG] Image upload error:", err);
+      alert("Image upload failed.");
+    });
+}
 
 function startRecording() {
   navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1005,16 +1091,18 @@ function sendAudio(audioBlob) {
         const data = JSON.parse(text);
         console.log("[DEBUG] Parsed JSON:", data);
 
-        // Render immediately for sender (aligned right)
-        addMessageToUI("Me", makeMediaNode('audio', data.url), new Date().toISOString());
+        // // Render immediately for sender (aligned right)
+        // addMessageToUI("Me", makeMediaNode('audio', data.url), new Date().toISOString());
 
-        // Send to receiver via WebSocket
-        socket.send(JSON.stringify({
-          type: "audio",
-          sender: loggedInUser,
-          receiver: activeReceiver,
-          url: data.url
-        }));
+        // // Send to receiver via WebSocket
+        // socket.send(JSON.stringify({
+        //   type: "audio",
+        //   sender: loggedInUser,
+        //   receiver: activeReceiver,
+        //   url: data.url
+        // }));
+
+        addMessageToUI("Me", makeMediaNode('audio', data.url), data.timestamp || new Date().toISOString());
         console.log("[DEBUG] WebSocket message sent for audio:", data.url);
       } catch (err) {
         console.error("[DEBUG] Failed to parse JSON:", err);
