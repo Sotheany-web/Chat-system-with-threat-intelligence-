@@ -1,0 +1,11 @@
+Flask
+flask-sock
+Flask-SQLAlchemy
+cryptography
+supabase
+Flask-WTF
+Flask-Mail
+python-dotenv
+gunicorn
+gevent
+psycopg2-binary

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verify OTP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0f5fc;
+            --card: #ffffff;
+            --border: #ccddf5;
+            --accent: #2860b0;
+            --accent-dim: rgba(40,96,176,0.1);
+            --text: #0a1e3c;
+            --muted: #6888b0;
+            --input-bg: #e8f0fc;
+            --danger: #c0392b;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::before {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(40,96,176,0.07) 0%, transparent 70%);
+            top: -100px; right: -100px;
+            animation: drift 12s ease-in-out infinite alternate;
+        }
+        body::after {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(100,160,230,0.06) 0%, transparent 70%);
+            bottom: -80px; left: -80px;
+            animation: drift 16s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes drift {
+            from { transform: translate(0, 0); }
+            to   { transform: translate(30px, 20px); }
+        }
+
+        .otp-wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+            animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .otp-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 48px 44px 44px;
+            box-shadow:
+                0 0 0 1px rgba(40,96,176,0.06),
+                0 20px 60px rgba(40,96,176,0.1),
+                0 4px 16px rgba(40,96,176,0.06);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .otp-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 10%; right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0.6;
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 36px;
+        }
+
+        .brand-icon {
+            width: 36px; height: 36px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(40,96,176,0.25);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .brand-icon svg {
+            width: 18px; height: 18px;
+            stroke: var(--accent);
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .brand-name {
+            font-family: 'Playfair Display', serif;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--text);
+        }
+
+        .shield-badge {
+            width: 64px; height: 64px;
+            background: var(--accent-dim);
+            border: 1.5px solid rgba(40,96,176,0.2);
+            border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 24px;
+        }
+
+        .shield-badge svg {
+            width: 30px; height: 30px;
+            stroke: var(--accent);
+            fill: none;
+            stroke-width: 1.6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 300;
+            margin-bottom: 20px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .expiry {
+            text-align: center;
+            font-size: 12.5px;
+            color: var(--muted);
+            margin-bottom: 28px;
+        }
+
+        #timer {
+            font-weight: 600;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+
+        #timer.expired { color: var(--danger); }
+
+        .alert-danger {
+            background: rgba(192,57,43,0.07);
+            border: 1px solid rgba(192,57,43,0.2);
+            border-radius: 10px;
+            color: var(--danger);
+            font-size: 13px;
+            padding: 10px 14px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert-danger::before {
+            content: '⚠';
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        /* 6 boxes */
+        .otp-boxes {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+
+        .otp-box {
+            width: 52px;
+            height: 58px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--input-bg);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            caret-color: var(--accent);
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.1s;
+            outline: none;
+        }
+
+        .otp-box:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(40,96,176,0.1);
+            transform: translateY(-1px);
+        }
+
+        .otp-box.filled {
+            border-color: rgba(40,96,176,0.4);
+            background: #ddeaf8;
+        }
+
+        .field-hint {
+            font-size: 11.5px;
+            color: var(--muted);
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .btn-verify {
+            width: 100%;
+            padding: 13px;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            color: #ffffff;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(40,96,176,0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-verify::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+        }
+
+        .btn-verify:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 28px rgba(40,96,176,0.35);
+        }
+
+        .btn-verify:active { transform: translateY(0); }
+
+        .btn-verify:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 22px;
+            font-size: 13px;
+            color: var(--muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover { color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="otp-wrapper">
+    <div class="otp-card">
+
+        <div class="brand-mark">
+            <div class="brand-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <span class="brand-name">Talky</span>
+        </div>
+
+        <div class="shield-badge">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+
+        <h3>OTP Verification</h3>
+        <p class="subtitle">Enter the OTP sent to your account</p>
+
+        <p class="expiry">Time left: <span id="timer">--:--</span></p>
+
+        {% if error %}
+        <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- hidden input carries the assembled OTP value on submit -->
+            <input type="hidden" name="otp" id="otp-hidden" required>
+
+            <div class="otp-boxes">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+            </div>
+            <p class="field-hint">One digit per box</p>
+
+            <button type="submit" class="btn-verify" id="verify-btn" disabled>Verify</button>
+        </form>
+
+        <a class="back-link" href="/login">← Back to login</a>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── 6-box UI: assembles digits into #otp-hidden ──────────────────────────────
+const boxes  = document.querySelectorAll('.otp-box');
+const hidden = document.getElementById('otp-hidden');
+const btn    = document.getElementById('verify-btn');
+
+function syncHidden() {
+    const val = [...boxes].map(b => b.value).join('');
+    hidden.value = val;
+    btn.disabled = val.length < 6 || [...boxes].some(b => !/^\d$/.test(b.value));
+    boxes.forEach(b => b.classList.toggle('filled', /^\d$/.test(b.value)));
+}
+
+boxes.forEach((box, i) => {
+    box.addEventListener('input', e => {
+        box.value = e.target.value.replace(/\D/g, '').slice(-1);
+        if (box.value && i < boxes.length - 1) boxes[i + 1].focus();
+        syncHidden();
+    });
+    box.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !box.value && i > 0) {
+            boxes[i - 1].focus();
+            boxes[i - 1].value = '';
+            syncHidden();
+        }
+    });
+    box.addEventListener('paste', e => {
+        e.preventDefault();
+        const paste = (e.clipboardData || window.clipboardData)
+            .getData('text').replace(/\D/g, '').slice(0, 6);
+        [...paste].forEach((ch, j) => { if (boxes[i + j]) boxes[i + j].value = ch; });
+        boxes[Math.min(i + paste.length, boxes.length - 1)].focus();
+        syncHidden();
+    });
+});
+
+// ── YOUR EXACT TIMER LOGIC (untouched) ───────────────────────────────────────
+const EXPIRY_KEY = "otp_expiry";
+const SERVER_EXPIRY = {{ otp_expiry | tojson }};
+// Always sync with server on fresh page load (GET), keep existing on wrong OTP (POST reload)
+const stored = parseFloat(sessionStorage.getItem(EXPIRY_KEY) || 0);
+if (!stored || SERVER_EXPIRY > stored) {
+    sessionStorage.setItem(EXPIRY_KEY, SERVER_EXPIRY);
+}
+const expiresAt = parseFloat(sessionStorage.getItem(EXPIRY_KEY));
+const timerEl = document.getElementById("timer");
+function updateTimer() {
+    const now = Date.now() / 1000;
+    const remaining = expiresAt - now;
+    if (!expiresAt || remaining <= 0) {
+        timerEl.textContent = "Expired";
+        timerEl.classList.add("expired");
+        btn.disabled = true;
+        return;
+    }
+    const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+    const s = String(Math.floor(remaining % 60)).padStart(2, "0");
+    timerEl.textContent = `${m}:${s}`;
+}
+updateTimer();
+setInterval(updateTimer, 1000);
+</script>
+</body>
+</html>
