@@ -15,7 +15,7 @@ let mediaRecorder;
 let audioChunks = [];
 let isRecording = false;
 
-let videoPc;
+let videoPc;  
 let localVideoStream;
 let videoCallStartTime;
 let videoDurationInterval;
