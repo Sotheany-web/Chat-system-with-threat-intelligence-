@@ -1,0 +1,10 @@
+flask
+flask-sock
+gunicorn
+gevent
+flask_sqlalchemy
+cryptography
+psycopg2-binary
+supabase
+joblib
+websockets>=11,<16
